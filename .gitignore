@@ -1,0 +1,10 @@
+bin/
+obj/
+publish/
+.vs/
+*.user
+*.suo
+__pycache__/
+*.pyc
+demo_out/
+.taskmonitor_test/
