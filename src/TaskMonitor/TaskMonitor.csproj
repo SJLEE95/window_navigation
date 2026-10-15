@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>TaskMonitor</RootNamespace>
+    <AssemblyName>TaskMonitor</AssemblyName>
+    <Version>0.1.0</Version>
+    <Product>TaskMonitor</Product>
+    <Description>백그라운드 작업 모니터</Description>
+    <SatelliteResourceLanguages>ko</SatelliteResourceLanguages>
+  </PropertyGroup>
+
+</Project>

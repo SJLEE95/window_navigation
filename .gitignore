@@ -8,3 +8,4 @@ __pycache__/
 *.pyc
 demo_out/
 .taskmonitor_test/
+build.log

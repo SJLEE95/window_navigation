@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>TaskMonitor.Check</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- 모니터 본체와 같은 판정 로직을 그대로 사용 (WPF 의존 없음) -->
+    <Compile Include="..\TaskMonitor\Core\*.cs" Link="Core\%(Filename)%(Extension)" />
+  </ItemGroup>
+
+</Project>

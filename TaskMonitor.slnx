@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="src/TaskMonitor/TaskMonitor.csproj" />
+  <Project Path="src/TaskMonitor.Check/TaskMonitor.Check.csproj" />
+</Solution>
