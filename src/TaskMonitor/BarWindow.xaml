@@ -45,6 +45,9 @@
                     </DataTemplate>
                 </ItemsControl.ItemTemplate>
             </ItemsControl>
+            <Button DockPanel.Dock="Left" Style="{StaticResource ChipButton}" Click="OpenMain_Click" ToolTip="작업 목록·상세 창">
+                <TextBlock Text="≡ 목록" Foreground="#E6EDF3" />
+            </Button>
             <Rectangle DockPanel.Dock="Left" Width="1" Fill="#40FFFFFF" Margin="0,2,4,2" />
             <ItemsControl DockPanel.Dock="Left" ItemsSource="{Binding Chips}" VerticalAlignment="Center">
                 <ItemsControl.ItemsPanel>
@@ -52,11 +55,11 @@
                 </ItemsControl.ItemsPanel>
                 <ItemsControl.ItemTemplate>
                     <DataTemplate>
-                        <Button Style="{StaticResource ChipButton}" Click="Chip_Click" Tag="{Binding TaskId, Mode=OneWay}"
+                        <Button Style="{StaticResource ChipButton}" Click="Chip_Click" Tag="{Binding TaskId, Mode=OneWay}" MaxWidth="280"
                                 ToolTip="{Binding Tooltip, Mode=OneWay}">
                             <StackPanel Orientation="Horizontal">
                                 <Border Width="3" Background="{Binding Brush, Mode=OneWay}" CornerRadius="1" Margin="0,1,6,1" />
-                                <TextBlock VerticalAlignment="Center">
+                                <TextBlock VerticalAlignment="Center" TextTrimming="CharacterEllipsis">
                                     <Run Text="{Binding Symbol, Mode=OneWay}" Foreground="{Binding Brush, Mode=OneWay}" />
                                     <Run Text="{Binding Label, Mode=OneWay}" Foreground="{Binding Brush, Mode=OneWay}" FontWeight="SemiBold" />
                                     <Run Text="{Binding Text, Mode=OneWay}" />
@@ -67,9 +70,6 @@
                 </ItemsControl.ItemTemplate>
             </ItemsControl>
             <TextBlock DockPanel.Dock="Left" Text="{Binding Overflow, Mode=OneWay}" Foreground="#B0FFFFFF" Margin="4,0" VerticalAlignment="Center" />
-            <Button DockPanel.Dock="Left" Style="{StaticResource ChipButton}" Click="OpenMain_Click" ToolTip="작업 목록·상세 창">
-                <TextBlock Text="≡ 목록" Foreground="#E6EDF3" />
-            </Button>
         </DockPanel>
     </Border>
 </Window>

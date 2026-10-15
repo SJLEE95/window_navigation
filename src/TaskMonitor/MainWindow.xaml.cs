@@ -11,6 +11,7 @@ public partial class MainWindow : Window
     private readonly MonitorController _c;
     private bool _forceClose;
     private string? _logKey;
+    private bool _autoSelect;
 
     public MainWindow(MonitorController c)
     {
@@ -35,7 +36,7 @@ public partial class MainWindow : Window
         StateDirRun.Text = Paths.Tasks;
         c.Updated += OnUpdated;
         Closing += OnClosing;
-        Loaded += (_, _) => { if (List.SelectedItem is null && List.Items.Count > 0) List.SelectedIndex = 0; };
+        _autoSelect = true;
     }
 
     private TaskItem? Selected => List.SelectedItem as TaskItem;
@@ -77,6 +78,12 @@ public partial class MainWindow : Window
 
     private void OnUpdated()
     {
+        // 처음 작업이 보이면 맨 위 작업을 자동 선택 (사용자가 고른 뒤에는 건드리지 않음)
+        if (_autoSelect && List.SelectedItem is null && List.Items.Count > 0)
+        {
+            List.SelectedIndex = 0;
+            _autoSelect = false;
+        }
         ErrorRun.Text = _c.LastError.Length > 0 ? "  " + _c.LastError : "";
         if (IsVisible) RefreshDetail();
     }
@@ -118,6 +125,14 @@ public partial class MainWindow : Window
         string errs = Presenter.ErrorLinesFromLog(tail);
         LogErrors.Text = errs.Length > 0 ? "로그의 오류 관련 줄:\n" + errs : "";
         LogErrors.Visibility = errs.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    // 상세 영역 안의 오류·로그 상자가 마우스 휠을 가로채지 않도록 (로그 상자 자체 스크롤은 유지)
+    private void Detail_PreviewMouseWheel(object sender, System.Windows.Input.MouseWheelEventArgs e)
+    {
+        if (LogBox.IsMouseOver) return;
+        Detail.ScrollToVerticalOffset(Detail.VerticalOffset - e.Delta / 2.0);
+        e.Handled = true;
     }
 
     // ---------------------------------------------------------------- actions

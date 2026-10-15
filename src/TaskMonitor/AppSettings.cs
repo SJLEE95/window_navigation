@@ -12,8 +12,8 @@ public sealed class AppSettings
     public bool Topmost { get; set; } = true;
     public bool HideOnFullscreen { get; set; } = true;
     public bool ShowRecentFinished { get; set; } = true;
-    public int RecentFinishedMinutes { get; set; } = 30;
-    public int MaxChips { get; set; } = 6;
+    public int RecentFinishedMinutes { get; set; } = 10;
+    public int MaxChips { get; set; } = 3;
     public double? BarX { get; set; }
     public double? BarY { get; set; }
     public double? MainLeft { get; set; }

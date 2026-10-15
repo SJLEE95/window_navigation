@@ -28,7 +28,12 @@ for (int n = 0; n < count; n++)
     store.Refresh();
     var now = DateTimeOffset.Now;
     TaskDoc? Lookup(string id) => store.Entries.TryGetValue(id, out var e) ? e.Doc : null;
-    var views = store.Entries.Values.Select(e => Presenter.Build(e, Lookup, probe, eta, now))
+    var views = store.Entries.Values.Select(e =>
+        {
+            var v = Presenter.Build(e, Lookup, probe, eta, now);
+            if (v.ExitedNoRecord && store.Reload(e.Id)) v = Presenter.Build(e, Lookup, probe, eta, now);
+            return v;
+        })
         .OrderBy(v => v.SortGroup).ThenByDescending(v => v.SortTime).ToList();
     Console.WriteLine($"--- {now:HH:mm:ss}  작업 {views.Count}개");
     foreach (var v in views)

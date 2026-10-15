@@ -162,7 +162,13 @@ public sealed class MonitorController : Observable
         var views = new List<TaskView>();
         foreach (var e in _store.Entries.Values)
         {
-            try { views.Add(Presenter.Build(e, Lookup, _probe, _eta, now)); }
+            try
+            {
+                var v = Presenter.Build(e, Lookup, _probe, _eta, now);
+                // 프로세스 종료를 봤다면 그 사이에 쓴 마지막 기록(완료/실패)이 있는지 한 번 더 읽고 판정
+                if (v.ExitedNoRecord && _store.Reload(e.Id)) v = Presenter.Build(e, Lookup, _probe, _eta, now);
+                views.Add(v);
+            }
             catch (Exception ex)
             {
                 views.Add(new TaskView { Id = e.Id, Name = e.Id, Kind = StatusKind.Unknown, Symbol = "?", StatusLabel = "표시 오류",
@@ -211,16 +217,19 @@ public sealed class MonitorController : Observable
         Replace(Summary, parts, (a, b) => a.Text == b.Text);
 
         var recent = TimeSpan.FromMinutes(Math.Max(1, Settings.RecentFinishedMinutes));
+        // 바에는 주의가 필요한 것 → 실행 중 → 대기 → 최근 완료 순으로 표시
         var chipViews = views.Where(v =>
-            !v.IsTerminal || v.Kind == StatusKind.Warning ||
-            (v.FinishedAt is DateTimeOffset f && now - f < recent &&
-             (Settings.ShowRecentFinished || v.Kind != StatusKind.Succeeded))).ToList();
+                v.IsActive ||
+                (v.ExitedNoRecord && now - v.SortTime < TimeSpan.FromHours(12)) ||
+                (v.FinishedAt is DateTimeOffset f && now - f < recent &&
+                 (Settings.ShowRecentFinished || v.Kind != StatusKind.Succeeded)))
+            .OrderBy(ChipPriority).ThenByDescending(v => v.SortTime).ToList();
         int max = Math.Max(1, Settings.MaxChips);
         var chips = chipViews.Take(max).Select(v => new BarChip
         {
             TaskId = v.Id,
             Symbol = v.Symbol,
-            Label = v.StatusLabel,
+            Label = v.StatusShort,
             Brush = Theme.For(v.Kind),
             Text = ChipText(v),
             Tooltip = $"{v.Name}\n{v.StatusLabel}\n{v.StageText}\n진행률: {v.ProgressText}\n예상 완료: {v.EtaShort}\n{v.UpdatedText}"
@@ -230,12 +239,25 @@ public sealed class MonitorController : Observable
         Overflow = chipViews.Count > max ? $"+{chipViews.Count - max}" : "";
     }
 
+    private static int ChipPriority(TaskView v) => v.Kind switch
+    {
+        StatusKind.Warning => 0,
+        StatusKind.Failed => 1,
+        StatusKind.Running or StatusKind.Validating => 2,
+        StatusKind.Waiting or StatusKind.Pending => 3,
+        _ => 4,
+    };
+
     private static string ChipText(TaskView v)
     {
-        var parts = new List<string> { Fmt.Trim(v.Name, 22) };
-        if (v.IsActive && v.StageShort.Length > 0) parts.Add(Fmt.Trim(v.StageShort, 18));
-        if (v.IsActive && v.ProgressText != "-") parts.Add(v.ProgressText.Replace("단계 ", ""));
-        if (v.EtaShort is { Length: > 0 } and not "-") parts.Add(v.EtaShort);
+        var parts = new List<string> { Fmt.Trim(v.Name, 18) };
+        if (v.IsActive)
+        {
+            double? pct = v.OverallPercent ?? v.StagePercent;
+            if (pct is double p) parts.Add(Fmt.Pct(p / 100));
+            if (v.EtaShort is { Length: > 0 } and not "-") parts.Add(v.EtaShort.Replace(" (단계)", ""));
+        }
+        else if (v.FinishedAt is DateTimeOffset f) parts.Add(f.ToLocalTime().ToString("HH:mm"));
         return string.Join(" · ", parts);
     }
 

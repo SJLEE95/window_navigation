@@ -1,7 +1,7 @@
 <Window x:Class="TaskMonitor.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="TaskMonitor — 작업 목록" Width="1080" Height="760" MinWidth="720" MinHeight="480"
+        Title="TaskMonitor — 작업 목록" Width="1200" Height="900" MinWidth="720" MinHeight="480"
         FontFamily="{StaticResource UiFont}" FontSize="13" Background="#FAFAFB"
         WindowStartupLocation="CenterScreen">
     <Grid Margin="10">
@@ -93,7 +93,7 @@
         <Border Grid.Row="3" BorderBrush="#DDD" BorderThickness="1" Background="White" CornerRadius="3">
             <Grid>
                 <TextBlock x:Name="EmptyHint" Text="목록에서 작업을 선택하세요." Foreground="#888" Margin="14" />
-                <ScrollViewer x:Name="Detail" VerticalScrollBarVisibility="Auto" Padding="14,10" Visibility="Collapsed">
+                <ScrollViewer x:Name="Detail" VerticalScrollBarVisibility="Auto" Padding="14,10" Visibility="Collapsed" PreviewMouseWheel="Detail_PreviewMouseWheel">
                     <StackPanel>
                         <DockPanel>
                             <Border DockPanel.Dock="Left" Background="{Binding Brush}" CornerRadius="3" Padding="8,2" Margin="0,0,10,0" VerticalAlignment="Center">
@@ -108,6 +108,15 @@
                         <TextBlock Text="{Binding V.Message}" Margin="0,4,0,0" TextWrapping="Wrap" />
                         <TextBlock Text="{Binding V.TimesText}" Margin="0,6,0,0" />
                         <TextBlock Text="{Binding V.UpdatedText}" />
+                        <WrapPanel Margin="0,8,0,0">
+                            <Button x:Name="BtnOpenResult" Content="결과 파일 열기" Click="OpenFirstResult_Click" Style="{StaticResource FlatButton}" />
+                            <Button x:Name="BtnOpenFolder" Content="결과 폴더 열기" Click="OpenFirstFolder_Click" Style="{StaticResource FlatButton}" />
+                            <Button x:Name="BtnOpenLog" Content="전체 로그 열기" Click="OpenLog_Click" Style="{StaticResource FlatButton}" />
+                            <Button x:Name="BtnWorkdir" Content="작업 디렉터리" Click="OpenWorkdir_Click" Style="{StaticResource FlatButton}" />
+                            <Button x:Name="BtnCancel" Content="중단 요청" Click="Cancel_Click" Style="{StaticResource FlatButton}" />
+                            <Button x:Name="BtnArchive" Content="목록에서 숨기기" Click="Archive_Click" Style="{StaticResource FlatButton}" />
+                        </WrapPanel>
+                        <TextBlock Text="{Binding V.CancelText}" Foreground="#666" />
 
                         <Border Background="#FFF8E1" BorderBrush="#E3B341" BorderThickness="1" CornerRadius="3" Padding="8,6" Margin="0,8,0,0"
                                 Visibility="{Binding HasWarnings, Converter={StaticResource BoolToVis}}">
@@ -215,15 +224,7 @@
                                  Height="220" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto"
                                  Background="#1E1F22" Foreground="#D7DAE0" BorderThickness="0" Padding="6" />
 
-                        <WrapPanel Margin="0,10,0,0">
-                            <Button x:Name="BtnOpenResult" Content="결과 파일 열기" Click="OpenFirstResult_Click" Style="{StaticResource FlatButton}" />
-                            <Button x:Name="BtnOpenFolder" Content="결과 폴더 열기" Click="OpenFirstFolder_Click" Style="{StaticResource FlatButton}" />
-                            <Button x:Name="BtnOpenLog" Content="전체 로그 열기" Click="OpenLog_Click" Style="{StaticResource FlatButton}" />
-                            <Button x:Name="BtnWorkdir" Content="작업 디렉터리" Click="OpenWorkdir_Click" Style="{StaticResource FlatButton}" />
-                            <Button x:Name="BtnCancel" Content="중단 요청" Click="Cancel_Click" Style="{StaticResource FlatButton}" />
-                            <Button x:Name="BtnArchive" Content="목록에서 숨기기" Click="Archive_Click" Style="{StaticResource FlatButton}" />
-                        </WrapPanel>
-                        <TextBlock Text="{Binding V.CancelText}" Foreground="#666" />
+
                     </StackPanel>
                 </ScrollViewer>
             </Grid>

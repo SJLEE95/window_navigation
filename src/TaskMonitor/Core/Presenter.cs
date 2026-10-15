@@ -40,6 +40,10 @@ public sealed class TaskView
     public StatusKind Kind { get; init; }
     public string Symbol { get; init; } = "";
     public string StatusLabel { get; init; } = "";
+    /// <summary>상단 바용 짧은 상태 이름</summary>
+    public string StatusShort { get; init; } = "";
+    /// <summary>프로세스는 끝났는데 완료·실패 기록이 없음</summary>
+    public bool ExitedNoRecord { get; init; }
     public List<string> Warnings { get; init; } = new();
     public string Message { get; init; } = "";
     public string StageText { get; init; } = "";
@@ -180,6 +184,10 @@ public static class Presenter
             }
         }
 
+        string statusShort = exitedNoRecord ? "종료 기록 없음"
+            : stale ? "갱신 없음"
+            : label.Replace(" · 중단 요청됨", " · 중단 요청");
+
         // ---- 결과
         var results = new List<ResultView>();
         foreach (var r in doc.Results ?? new List<ResultDoc>())
@@ -198,6 +206,7 @@ public static class Presenter
         {
             kind = StatusKind.Warning;
             label = "완료 · 결과 확인 필요";
+            statusShort = "결과 확인";
             warnings.Add("결과 경로가 없거나 미완성입니다: " + string.Join(", ", results.Where(r => !r.Exists || r.Incomplete).Select(r => r.Label)));
         }
 
@@ -243,7 +252,9 @@ public static class Presenter
             }
             string time = "";
             if (s.StartedAt is DateTimeOffset sa)
-                time = s.FinishedAt is DateTimeOffset fa ? $"소요 {Fmt.Elapsed(fa - sa)}" : $"{Fmt.Clock(sa, now, true)} 시작 · {Fmt.Elapsed(now - sa)} 경과";
+                time = s.FinishedAt is DateTimeOffset fa ? $"소요 {Fmt.Elapsed(fa - sa)}"
+                     : exitedNoRecord ? $"{Fmt.Clock(sa, now, true)} 시작 · 기록 중단"
+                     : $"{Fmt.Clock(sa, now, true)} 시작 · {Fmt.Elapsed(now - sa)} 경과";
             else if (s.ExpectedSeconds is double ex)
                 time = $"평소 약 {Fmt.Span(TimeSpan.FromSeconds(ex))}";
             if (!string.IsNullOrEmpty(s.Note)) time = string.IsNullOrEmpty(time) ? s.Note! : time + " · " + s.Note;
@@ -269,9 +280,11 @@ public static class Presenter
             else if (stageOf.Length > 0 && stages.Count > 1) parts.Add(stageOf);
             progress = parts.Count > 0 ? string.Join(" · ", parts) : "-";
         }
-        string overallText = overall is double o2 ? $"전체 {Fmt.Pct(o2)} (단계 가중치 기준)"
-            : stages.Count > 1 ? $"전체 진행률: 근거 부족 — {(curIdx >= 0 ? stageOf : $"{stages.Count(s => s.State is "succeeded" or "skipped")}/{stages.Count}단계 완료")}"
-            : "";
+        int doneStages = stages.Count(s => s.State is "succeeded" or "skipped");
+        string overallText = state == "succeeded" && doneStages == stages.Count ? "100% (모든 단계 완료)"
+            : overall is double o2 ? $"{Fmt.Pct(o2)} (단계 가중치 기준)"
+            : stages.Count > 1 ? $"근거 부족 — {doneStages}/{stages.Count}단계 완료" + (curIdx >= 0 && !terminal ? $", 지금 {curIdx + 1}단계" : "")
+            : stageFrac is double sf3 ? $"{Fmt.Pct(sf3)} (단일 단계)" : "근거 부족";
 
         // ---- ETA
         var e = (exitedNoRecord || terminal) ? EtaInfo.None : eta.Compute(doc, now);
@@ -290,7 +303,9 @@ public static class Presenter
         if (doc.StartedAt is DateTimeOffset started)
         {
             times.Append($"시작 {Fmt.Clock(started, now, true)} · ");
-            times.Append(doc.FinishedAt is DateTimeOffset f3 ? $"소요 {Fmt.Elapsed(f3 - started)} · 종료 {Fmt.Clock(f3, now, true)}" : $"경과 {Fmt.Elapsed(now - started)}");
+            times.Append(doc.FinishedAt is DateTimeOffset f3 ? $"소요 {Fmt.Elapsed(f3 - started)} · 종료 {Fmt.Clock(f3, now, true)}"
+                : exitedNoRecord ? $"마지막 기록까지 {Fmt.Elapsed(updated - started)} (프로세스 종료됨)"
+                : $"경과 {Fmt.Elapsed(now - started)}");
         }
         else if (doc.CreatedAt is DateTimeOffset created) times.Append($"등록 {Fmt.Clock(created, now, true)} · 아직 시작 전");
         string updatedText = $"마지막 상태 갱신 {Fmt.Clock(updated, now, true)} ({Fmt.Ago(updated, now)})" + (stale ? " — 상태 갱신 없음" : "");
@@ -324,13 +339,8 @@ public static class Presenter
             : cancelRequested ? "중단 요청됨 — 작업이 정리 후 멈출 때까지 기다리는 중"
             : "중단 지원 — 요청하면 작업이 스스로 정리한 뒤 멈춥니다";
 
-        int group = kind switch
-        {
-            StatusKind.Running or StatusKind.Validating or StatusKind.Warning when !terminal => 0,
-            StatusKind.Waiting or StatusKind.Pending => 1,
-            StatusKind.Failed or StatusKind.Warning or StatusKind.Unknown => 2,
-            _ => 3,
-        };
+        // 정렬: 진행 중인 작업이 위, 그 안에서는 등록 순서(최근 먼저). 상태가 바뀌어도 줄이 흔들리지 않도록 고정 키 사용
+        int group = !terminal && !exitedNoRecord ? 0 : 1;
 
         return new TaskView
         {
@@ -342,6 +352,8 @@ public static class Presenter
             Kind = kind,
             Symbol = Symbol(kind),
             StatusLabel = label,
+            StatusShort = kind == StatusKind.Warning && label == "완료 기록 불일치" ? "기록 불일치" : statusShort,
+            ExitedNoRecord = exitedNoRecord,
             Warnings = warnings,
             Message = doc.Message ?? "",
             StageText = cur is null ? (terminal && stages.Count > 0 ? "" : "-") : $"{cur.Name ?? cur.Key}" + (stages.Count > 1 ? $" ({curIdx + 1}/{stages.Count})" : ""),
@@ -370,7 +382,7 @@ public static class Presenter
             CanArchive = terminal || exitedNoRecord,
             FinishedAt = doc.FinishedAt,
             SortGroup = group,
-            SortTime = doc.StartedAt ?? doc.CreatedAt ?? updated,
+            SortTime = doc.CreatedAt ?? doc.StartedAt ?? updated,
         };
     }
 

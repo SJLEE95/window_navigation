@@ -91,6 +91,26 @@ public sealed class TaskStore
         return changed;
     }
 
+    /// <summary>파일을 즉시 다시 읽음. 프로세스 종료를 감지했을 때 마지막 기록을 놓치지 않기 위해 사용.</summary>
+    public bool Reload(string id)
+    {
+        if (!_entries.TryGetValue(id, out var e)) return false;
+        try
+        {
+            var fi = new FileInfo(e.FilePath);
+            if (!fi.Exists) return false;
+            if (!TryRead(e.FilePath, out var doc, out var err)) return false;
+            if (string.IsNullOrEmpty(doc!.Id)) doc.Id = id;
+            e.Doc = doc;
+            e.ReadError = null;
+            e.LastWriteUtc = fi.LastWriteTimeUtc;
+            e.Length = fi.Length;
+            e.Version++;
+            return true;
+        }
+        catch { return false; }
+    }
+
     private static bool TryRead(string path, out TaskDoc? doc, out string? error)
     {
         doc = null;

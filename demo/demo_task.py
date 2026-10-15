@@ -46,7 +46,7 @@ def frames(t: TaskReporter, key: str, total: int, per: float, *, fail_at: int | 
         sleep(per * random.uniform(1 - jitter, 1 + jitter))
         done = i + 1
         el = max(1e-6, time.monotonic() - t0)
-        t.progress(done, total, stage=key, rate=round(done / el, 2), rate_unit="frames/s")
+        t.progress(done, total, stage=key, rate=round(done / el, 2))
         if done % 20 == 0:
             t.log(f"[{key}] {done}/{total}")
         if fail_at is not None and done == fail_at:
