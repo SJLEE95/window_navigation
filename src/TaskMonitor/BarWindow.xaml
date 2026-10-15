@@ -25,6 +25,7 @@
                 <MenuItem x:Name="MiTopmost" Header="항상 위에 표시" IsCheckable="True" Click="Topmost_Click" />
                 <MenuItem x:Name="MiFullscreen" Header="다른 프로그램이 전체 화면이면 숨기기" IsCheckable="True" Click="Fullscreen_Click" />
                 <MenuItem x:Name="MiRecent" Header="최근 완료 작업도 표시" IsCheckable="True" Click="Recent_Click" />
+                <MenuItem x:Name="MiAuto" Header="실행 중인 Python 작업 자동 감지" IsCheckable="True" Click="Auto_Click" />
                 <MenuItem x:Name="MiAutostart" Header="Windows 시작 시 실행" IsCheckable="True" Click="Autostart_Click" />
                 <Separator />
                 <MenuItem Header="상태 폴더 열기" Click="OpenFolder_Click" />

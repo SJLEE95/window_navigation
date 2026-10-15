@@ -40,6 +40,7 @@ public static class Theme
     public static readonly Brush Failed = B("#F85149");
     public static readonly Brush Cancelled = B("#F0883E");
     public static readonly Brush Warning = B("#E3B341");
+    public static readonly Brush Exited = B("#8FA3B8");
 
     public static Brush For(StatusKind k) => k switch
     {
@@ -51,6 +52,7 @@ public static class Theme
         StatusKind.Failed => Failed,
         StatusKind.Cancelled => Cancelled,
         StatusKind.Warning => Warning,
+        StatusKind.Exited => Exited,
         _ => Pending,
     };
 }
@@ -91,6 +93,7 @@ public sealed class TaskItem : Observable
     public bool HasWaiting => _v.WaitingText.Length > 0;
     public string ProjectLine => string.Join("   ", new[]
     {
+        _v.IsAuto ? "자동 감지" : "",
         _v.Project.Length > 0 ? "프로젝트: " + _v.Project : "",
         _v.Subject.Length > 0 ? "입력: " + _v.Subject : "",
         "ID: " + _v.Id,
@@ -119,6 +122,7 @@ public sealed class MonitorController : Observable
     private readonly TaskStore _store = new();
     private readonly ProcessProbe _probe = new();
     private readonly EtaEstimator _eta = new();
+    private readonly ProcessDiscovery _discovery = new();
     private readonly System.Windows.Threading.DispatcherTimer _timer;
     private string _lastError = "";
 
@@ -151,7 +155,8 @@ public sealed class MonitorController : Observable
         try
         {
             _store.Refresh();
-            LastError = "";
+            if (_discovery.Scan(_store.Entries, Settings, DateTimeOffset.Now)) _store.Refresh();
+            LastError = _discovery.LastError;
         }
         catch (Exception ex)
         {
@@ -207,12 +212,14 @@ public sealed class MonitorController : Observable
         int warn = views.Count(v => v.Kind == StatusKind.Warning);
         int failed = views.Count(v => v.Kind == StatusKind.Failed);
         int done = views.Count(v => v.Kind == StatusKind.Succeeded);
+        int exited = views.Count(v => v.Kind == StatusKind.Exited);
         var parts = new List<SummaryPart>();
         if (running > 0) parts.Add(new SummaryPart { Text = $"▶ 실행 {running}", Brush = Theme.Running });
         if (waiting > 0) parts.Add(new SummaryPart { Text = $"⏸ 대기 {waiting}", Brush = Theme.Waiting });
         if (warn > 0) parts.Add(new SummaryPart { Text = $"⚠ 확인 {warn}", Brush = Theme.Warning });
         if (failed > 0) parts.Add(new SummaryPart { Text = $"✕ 실패 {failed}", Brush = Theme.Failed });
         if (done > 0) parts.Add(new SummaryPart { Text = $"✔ 완료 {done}", Brush = Theme.Succeeded });
+        if (exited > 0) parts.Add(new SummaryPart { Text = $"◼ 종료 {exited}", Brush = Theme.Exited });
         if (parts.Count == 0) parts.Add(new SummaryPart { Text = "작업 없음", Brush = Theme.Pending });
         Replace(Summary, parts, (a, b) => a.Text == b.Text);
 
@@ -250,7 +257,9 @@ public sealed class MonitorController : Observable
 
     private static string ChipText(TaskView v)
     {
-        var parts = new List<string> { Fmt.Trim(v.Name, 18) };
+        // 자동 감지 작업은 이름이 모두 'script.py --...' 로 비슷하므로 스크립트 이름 + 입력(샘플)으로 구분
+        string title = v.IsAuto && v.Subject.Length > 0 ? $"{v.Name.Split(' ')[0]} {v.Subject}" : v.Name;
+        var parts = new List<string> { Fmt.Trim(title, 24) };
         if (v.IsActive)
         {
             double? pct = v.OverallPercent ?? v.StagePercent;

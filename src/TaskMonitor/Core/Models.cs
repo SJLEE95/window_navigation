@@ -33,6 +33,17 @@ public sealed class TaskDoc
     public CancelDoc? Cancel { get; set; }
     public CompletionDoc? Completion { get; set; }
     public long? Seq { get; set; }
+    /// <summary>"auto" = 모니터가 프로세스를 자동 감지해서 만든 기록</summary>
+    public string? Source { get; set; }
+    public string? CommandLine { get; set; }
+    public ActivityDoc? Activity { get; set; }
+}
+
+public sealed class ActivityDoc
+{
+    public double? CpuPercent { get; set; }
+    public DateTimeOffset? IdleSince { get; set; }
+    public string? LogGuess { get; set; }
 }
 
 public sealed class StageDoc

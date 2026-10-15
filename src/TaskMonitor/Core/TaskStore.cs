@@ -17,6 +17,8 @@ public static class Paths
             : System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "TaskMonitor"));
 
     public static string Tasks => System.IO.Path.Combine(Root, "tasks");
+    /// <summary>자동 감지한 프로세스 기록 (모니터가 씀)</summary>
+    public static string Auto => System.IO.Path.Combine(Root, "auto");
     public static string Control => System.IO.Path.Combine(Root, "control");
     public static string Archive => System.IO.Path.Combine(Root, "archive");
     public static string Settings => System.IO.Path.Combine(Root, "settings.json");
@@ -45,9 +47,9 @@ public sealed class TaskStore
     {
         bool changed = false;
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        string dir = Paths.Tasks;
-        if (Directory.Exists(dir))
+        foreach (var dir in new[] { Paths.Tasks, Paths.Auto })
         {
+            if (!Directory.Exists(dir)) continue;
             foreach (var path in Directory.EnumerateFiles(dir, "*.json"))
             {
                 string id = System.IO.Path.GetFileNameWithoutExtension(path);
@@ -250,6 +252,7 @@ public static class TaskFiles
     public static void Archive(string id)
     {
         string src = System.IO.Path.Combine(Paths.Tasks, id + ".json");
+        if (!File.Exists(src)) src = System.IO.Path.Combine(Paths.Auto, id + ".json");
         Directory.CreateDirectory(Paths.Archive);
         string dst = System.IO.Path.Combine(Paths.Archive, id + ".json");
         if (File.Exists(dst)) dst = System.IO.Path.Combine(Paths.Archive, $"{id}.{DateTime.Now:yyyyMMddHHmmss}.json");

@@ -3,7 +3,7 @@ using System.Text.RegularExpressions;
 
 namespace TaskMonitor.Core;
 
-public enum StatusKind { Pending, Waiting, Running, Validating, Succeeded, Failed, Cancelled, Warning, Unknown }
+public enum StatusKind { Pending, Waiting, Running, Validating, Succeeded, Failed, Cancelled, Warning, Exited, Unknown }
 
 public sealed class StageView
 {
@@ -36,6 +36,9 @@ public sealed class TaskView
     public string Name { get; init; } = "";
     public string Project { get; init; } = "";
     public string Subject { get; init; } = "";
+    public bool IsAuto { get; init; }
+    public string CommandLine { get; init; } = "";
+    public string ActivityText { get; init; } = "";
     public string Workdir { get; init; } = "";
     public StatusKind Kind { get; init; }
     public string Symbol { get; init; } = "";
@@ -86,6 +89,7 @@ public static class Presenter
         StatusKind.Succeeded => "✔",
         StatusKind.Failed => "✕",
         StatusKind.Cancelled => "■",
+        StatusKind.Exited => "◼",
         StatusKind.Warning => "⚠",
         _ => "?",
     };
@@ -98,6 +102,7 @@ public static class Presenter
         "failed" => (StatusKind.Failed, "실패"),
         "skipped" => (StatusKind.Pending, "건너뜀"),
         "cancelled" => (StatusKind.Cancelled, "중단"),
+        "exited" => (StatusKind.Exited, "종료"),
         null or "" or "pending" => (StatusKind.Pending, "대기"),
         _ => (StatusKind.Unknown, s!),
     };
@@ -118,7 +123,8 @@ public static class Presenter
 
         var warnings = new List<string>();
         string state = doc.State ?? "";
-        bool terminal = state is "succeeded" or "failed" or "cancelled";
+        bool terminal = state is "succeeded" or "failed" or "cancelled" or "exited";
+        bool auto = doc.Source == "auto";
         var stages = doc.Stages ?? new List<StageDoc>();
         int curIdx = stages.FindIndex(s => s.Key == doc.CurrentStage);
         var cur = curIdx >= 0 ? stages[curIdx] : null;
@@ -143,6 +149,12 @@ public static class Presenter
             case "succeeded": kind = StatusKind.Succeeded; label = "완료"; break;
             case "failed": kind = StatusKind.Failed; label = "실패"; break;
             case "cancelled": kind = StatusKind.Cancelled; label = "중단"; break;
+            case "exited":
+                // 자동 감지 작업: 종료 코드만 앎. 0 이어도 '완료'로 보지 않음
+                int code = doc.Completion?.ExitCode ?? -1;
+                kind = code == 0 ? StatusKind.Exited : doc.Completion?.ExitCode is null ? StatusKind.Warning : StatusKind.Failed;
+                label = code == 0 ? "종료 · 코드 0" : doc.Completion?.ExitCode is null ? "종료 · 코드 모름" : $"오류 종료 · 코드 {code}";
+                break;
             default: kind = StatusKind.Unknown; label = $"알 수 없는 상태({state})"; break;
         }
 
@@ -166,10 +178,18 @@ public static class Presenter
             {
                 stale = true;
                 kind = StatusKind.Warning;
-                label += " · 상태 갱신 없음";
+                label += auto ? " · 로그 갱신 없음" : " · 상태 갱신 없음";
                 string proc = ps == ProcState.Alive ? "프로세스는 실행 중" : "프로세스 확인 불가";
-                warnings.Add($"상태 갱신 없음: 마지막 갱신 {Fmt.Clock(updated, now, true)} ({Fmt.Ago(updated, now)}), " +
+                warnings.Add($"{(auto ? "로그" : "상태")} 갱신 없음: 마지막 갱신 {Fmt.Clock(updated, now, true)} ({Fmt.Ago(updated, now)}), " +
                              $"기준 {staleAfter:0}초, {proc}. 실패로 판단하지 않고 계속 지켜봅니다.");
+            }
+            else if (auto && doc.Activity?.IdleSince is DateTimeOffset idle && (now - idle).TotalSeconds > staleAfter)
+            {
+                stale = true;
+                kind = StatusKind.Warning;
+                label += " · 활동 없음";
+                warnings.Add($"CPU 사용이 {Fmt.Span(now - idle)}째 거의 없습니다 ({Fmt.Clock(idle, now, true)}부터). " +
+                             "입력·다른 작업을 기다리거나 GPU 작업 중일 수도 있고, 멈췄을 수도 있습니다 (자동 감지, 확정 아님).");
             }
             if (cancelRequested && cancelSupported) label += " · 중단 요청됨";
         }
@@ -327,6 +347,9 @@ public static class Presenter
 
         string completion = state switch
         {
+            "exited" => doc.Completion?.ExitCode is int xc
+                ? $"자동 감지: 프로세스가 종료 코드 {xc}(으)로 끝났습니다. 스크립트의 완료 기록은 없으므로 결과는 직접 확인하세요."
+                : "자동 감지: 종료 코드를 알 수 없습니다 (모니터가 꺼져 있는 동안 종료).",
             "succeeded" => doc.Completion?.Basis == "exit_code"
                 ? $"완료 근거: 래퍼가 종료 코드 {doc.Completion.ExitCode} 확인 (스크립트 자체 완료 기록 아님)"
                 : "완료 근거: 작업이 완료를 직접 기록",
@@ -348,6 +371,14 @@ public static class Presenter
             Name = doc.Name ?? doc.Id,
             Project = doc.Project ?? "",
             Subject = doc.Subject ?? "",
+            IsAuto = auto,
+            CommandLine = doc.CommandLine ?? "",
+            ActivityText = !auto ? "" : string.Join(" · ", new[]
+            {
+                "자동 감지(상태 기록 없는 프로세스)",
+                !terminal && doc.Activity?.CpuPercent is double cpu ? $"CPU {cpu:0}%" : "",
+                doc.Activity?.LogGuess is { Length: > 0 } lg ? "로그(추정): " + lg : !terminal ? "로그 파일을 찾지 못함 — 진행률은 알 수 없음" : "",
+            }.Where(x => x.Length > 0)),
             Workdir = doc.Workdir ?? "",
             Kind = kind,
             Symbol = Symbol(kind),
@@ -395,6 +426,7 @@ public static class Presenter
         "succeeded" => "완료",
         "failed" => "실패",
         "cancelled" => "중단",
+        "exited" => "종료",
         null or "" => "알 수 없음",
         _ => s!,
     };

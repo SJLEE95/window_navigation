@@ -210,6 +210,8 @@ public partial class MainWindow : Window
         ShowInFolder(Paths.Tasks);
     }
 
+    private void ExitMonitor_Click(object sender, RoutedEventArgs e) => App.Current.ExitApp();
+
     private void Cancel_Click(object sender, RoutedEventArgs e)
     {
         var v = Selected?.V;

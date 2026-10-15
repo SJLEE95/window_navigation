@@ -1,6 +1,7 @@
 // TaskMonitor.Check: 모니터와 같은 판정 로직(Core)을 콘솔에 출력하는 확인 도구.
 //   dotnet run --project src/TaskMonitor.Check -- [--dir <상태루트>] [--watch <초>] [--count <회>] [--detail]
 using System.Text;
+using TaskMonitor;
 using TaskMonitor.Core;
 
 Console.OutputEncoding = Encoding.UTF8;
@@ -16,6 +17,43 @@ for (int i = 0; i < args.Length; i++)
         case "--watch": watch = double.Parse(args[++i], System.Globalization.CultureInfo.InvariantCulture); break;
         case "--count": count = int.Parse(args[++i]); break;
         case "--detail": detail = true; break;
+        case "--discover":
+            {
+                // 진단: 보이는 python 프로세스와, 자동 감지 코드가 무엇을 기록하는지 출력
+                if (i + 1 < args.Length && !args[i + 1].StartsWith("--")) Paths.SetRoot(args[++i]);
+                foreach (var pr in System.Diagnostics.Process.GetProcesses())
+                {
+                    string nm; try { nm = pr.ProcessName; } catch { continue; }
+                    if (!nm.Contains("py", StringComparison.OrdinalIgnoreCase)) continue;
+                    string st; try { st = pr.StartTime.ToString("HH:mm:ss"); } catch (Exception ex) { st = "StartTime 오류: " + ex.Message; }
+                    Console.WriteLine($"process pid={pr.Id} name={nm} session={pr.SessionId} start={st}");
+                }
+                var settings = AppSettings.Load();
+                Console.WriteLine($"auto_detect={settings.AutoDetect} names={string.Join(",", settings.AutoDetectProcessNames)} min_age={settings.AutoDetectMinAgeSeconds} root={Paths.Root}");
+                using var disc = new ProcessDiscovery();
+                var st2 = new TaskStore();
+                for (int k = 0; k < 3; k++)
+                {
+                    st2.Refresh();
+                    bool wrote = disc.Scan(st2.Entries, settings, DateTimeOffset.Now);
+                    Console.WriteLine($"scan {k}: wrote={wrote} error='{disc.LastError}'");
+                    Thread.Sleep(3500);
+                }
+                st2.Refresh();
+                foreach (var e in st2.Entries.Values.Where(e => e.Doc?.Source == "auto"))
+                    Console.WriteLine($"auto: {e.Id} state={e.Doc!.State} name={e.Doc.Name} log={e.Doc.LogPath}");
+                string tr = Path.Combine(Paths.Auto, "_discovery.log");
+                if (File.Exists(tr)) Console.WriteLine(File.ReadAllText(tr));
+                return;
+            }
+        case "--parse-log":
+            {
+                string tail = TaskFiles.ReadTail(args[++i], 60, out _);
+                var p = LogProgressParser.ParseTail(tail);
+                Console.OutputEncoding = Encoding.UTF8;
+                Console.WriteLine(p is null ? "진행 표시 없음" : $"{p.Format}: {p.Done}/{p.Total} {p.Unit} rate={p.Rate} eta={p.EtaSeconds}s stage={p.Stage} sample={p.Sample}");
+                return;
+            }
     }
 }
 Paths.SetRoot(dir);
@@ -43,6 +81,8 @@ for (int n = 0; n < count; n++)
         if (detail)
         {
             Console.WriteLine($"      {v.TimesText} | {v.UpdatedText}");
+            if (v.IsAuto) Console.WriteLine($"      {v.ActivityText}\n      명령: {v.CommandLine}");
+            if (v.Message.Length > 0) Console.WriteLine($"      메시지: {v.Message}");
             Console.WriteLine($"      단계 ETA: {v.StageEtaText} | 전체 ETA: {v.OverallEtaText} | {v.OverallProgressText}");
             foreach (var s in v.Stages)
                 Console.WriteLine($"        {s.Index}. {s.Symbol} {Pad(s.StatusLabel, 6)} {Pad(s.Name, 24)} {Pad(s.Amount, 20)} {Pad(s.RateText, 22)} {s.PercentText} {s.TimeText}");

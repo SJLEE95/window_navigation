@@ -6,11 +6,16 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <RootNamespace>TaskMonitor.Check</RootNamespace>
+    <!-- Windows 전용 도구 (AppSettings 의 레지스트리 코드를 함께 컴파일) -->
+    <NoWarn>$(NoWarn);CA1416</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
     <!-- 모니터 본체와 같은 판정 로직을 그대로 사용 (WPF 의존 없음) -->
     <Compile Include="..\TaskMonitor\Core\*.cs" Link="Core\%(Filename)%(Extension)" />
+    <!-- discover 진단 모드용: 모니터의 자동 감지 코드를 그대로 사용 -->
+    <Compile Include="..\TaskMonitor\ProcessDiscovery.cs" Link="ProcessDiscovery.cs" />
+    <Compile Include="..\TaskMonitor\AppSettings.cs" Link="AppSettings.cs" />
   </ItemGroup>
 
 </Project>

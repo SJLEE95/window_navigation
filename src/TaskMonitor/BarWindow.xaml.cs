@@ -136,6 +136,7 @@ public partial class BarWindow : Window
         MiTopmost.IsChecked = _c.Settings.Topmost;
         MiFullscreen.IsChecked = _c.Settings.HideOnFullscreen;
         MiRecent.IsChecked = _c.Settings.ShowRecentFinished;
+        MiAuto.IsChecked = _c.Settings.AutoDetect;
         MiAutostart.IsChecked = Autostart.IsEnabled;
     }
 
@@ -165,6 +166,13 @@ public partial class BarWindow : Window
     private void Recent_Click(object sender, RoutedEventArgs e)
     {
         _c.Settings.ShowRecentFinished = !_c.Settings.ShowRecentFinished;
+        _c.Settings.Save();
+        _c.Tick();
+    }
+
+    private void Auto_Click(object sender, RoutedEventArgs e)
+    {
+        _c.Settings.AutoDetect = !_c.Settings.AutoDetect;
         _c.Settings.Save();
         _c.Tick();
     }

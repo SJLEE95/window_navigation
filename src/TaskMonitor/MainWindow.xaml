@@ -15,6 +15,8 @@
         <DockPanel Grid.Row="0" Margin="0,0,0,8">
             <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
                 <Button Content="상태 폴더 열기" Click="OpenStateFolder_Click" Padding="10,3" Margin="6,0,0,0" />
+                <Button Content="모니터 종료" Click="ExitMonitor_Click" Padding="10,3" Margin="6,0,0,0"
+                        ToolTip="모니터만 끕니다. 실행 중인 작업은 계속 돕니다." />
             </StackPanel>
             <TextBlock VerticalAlignment="Center" Foreground="#666" TextTrimming="CharacterEllipsis">
                 <Run Text="작업 상태 폴더:" />
@@ -105,6 +107,11 @@
                             <TextBlock Text="{Binding V.Name}" FontSize="17" FontWeight="SemiBold" TextWrapping="Wrap" />
                         </DockPanel>
                         <TextBlock Text="{Binding ProjectLine}" Foreground="#666" Margin="0,4,0,0" TextWrapping="Wrap" />
+                        <TextBlock Text="{Binding V.ActivityText}" Foreground="#3B6EA5" Margin="0,2,0,0" TextWrapping="Wrap"
+                                   Visibility="{Binding V.IsAuto, Converter={StaticResource BoolToVis}}" />
+                        <TextBox Text="{Binding V.CommandLine, Mode=OneWay}" IsReadOnly="True" BorderThickness="0" Background="Transparent"
+                                 FontFamily="{StaticResource MonoFont}" FontSize="11" Foreground="#555" TextWrapping="Wrap"
+                                 Visibility="{Binding V.IsAuto, Converter={StaticResource BoolToVis}}" />
                         <TextBlock Text="{Binding V.Message}" Margin="0,4,0,0" TextWrapping="Wrap" />
                         <TextBlock Text="{Binding V.TimesText}" Margin="0,6,0,0" />
                         <TextBlock Text="{Binding V.UpdatedText}" />

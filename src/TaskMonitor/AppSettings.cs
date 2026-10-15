@@ -14,6 +14,17 @@ public sealed class AppSettings
     public bool ShowRecentFinished { get; set; } = true;
     public int RecentFinishedMinutes { get; set; } = 10;
     public int MaxChips { get; set; } = 3;
+    /// <summary>상태 파일을 쓰지 않는 Python 작업도 자동으로 찾기</summary>
+    public bool AutoDetect { get; set; } = true;
+    public List<string> AutoDetectProcessNames { get; set; } = new() { "python", "pythonw" };
+    public int AutoDetectMinAgeSeconds { get; set; } = 15;
+    public int AutoDetectStaleSeconds { get; set; } = 300;
+    public List<string> AutoDetectExclude { get; set; } = new()
+    {
+        "ipykernel", "jupyter", "debugpy", "pydevd", " -m pip", "\\pip\\", "language_server", "pylsp", "jedi",
+        " -m black", " -m ruff", " -m mypy", " -m flake8", " -m isort", " -m pylint", "multiprocessing",
+        "taskstate.py", "\\.vscode\\", "\\extensions\\ms-python", "\\Scripts\\conda", "streamlit",
+    };
     public double? BarX { get; set; }
     public double? BarY { get; set; }
     public double? MainLeft { get; set; }
