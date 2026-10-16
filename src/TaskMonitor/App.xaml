@@ -3,26 +3,43 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              ShutdownMode="OnExplicitShutdown">
     <Application.Resources>
-        <FontFamily x:Key="UiFont">Segoe UI, Malgun Gothic</FontFamily>
+        <!-- 시안 B: 다크 캡슐 + 진행 링 -->
+        <FontFamily x:Key="UiFont">Segoe UI Variable Text, Segoe UI, Malgun Gothic</FontFamily>
         <FontFamily x:Key="MonoFont">Cascadia Mono, Consolas, D2Coding, Malgun Gothic</FontFamily>
+        <FontFamily x:Key="IconFont">Segoe Fluent Icons, Segoe MDL2 Assets</FontFamily>
         <BooleanToVisibilityConverter x:Key="BoolToVis" />
 
-        <!-- 상단 바의 작업 칩 -->
-        <Style x:Key="ChipButton" TargetType="Button">
-            <Setter Property="Foreground" Value="#E6EDF3" />
-            <Setter Property="Background" Value="#26FFFFFF" />
+        <SolidColorBrush x:Key="CapsuleBg" Color="#0C0D10" />
+        <SolidColorBrush x:Key="Ground" Color="#14161B" />
+        <SolidColorBrush x:Key="WindowBg" Color="#1B1E24" />
+        <SolidColorBrush x:Key="SidebarBg" Color="#16181D" />
+        <SolidColorBrush x:Key="CardBg" Color="#1F2229" />
+        <SolidColorBrush x:Key="CardSelBg" Color="#262A33" />
+        <SolidColorBrush x:Key="RaisedBg" Color="#22262E" />
+        <SolidColorBrush x:Key="Line" Color="#2A2E37" />
+        <SolidColorBrush x:Key="LineStrong" Color="#343944" />
+        <SolidColorBrush x:Key="Ink" Color="#E6E8EE" />
+        <SolidColorBrush x:Key="Muted" Color="#9AA0AC" />
+        <SolidColorBrush x:Key="Accent" Color="#8AB4FF" />
+        <SolidColorBrush x:Key="AccentInk" Color="#0C0D10" />
+        <SolidColorBrush x:Key="HoverBg" Color="#2A2E37" />
+
+        <!-- 투명 아이콘/칩 버튼 -->
+        <Style x:Key="GhostButton" TargetType="Button">
+            <Setter Property="Foreground" Value="{StaticResource Ink}" />
+            <Setter Property="Background" Value="Transparent" />
             <Setter Property="Cursor" Value="Hand" />
             <Setter Property="Focusable" Value="False" />
+            <Setter Property="Padding" Value="8,0" />
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
-                        <Border x:Name="Bd" Background="{TemplateBinding Background}" CornerRadius="4"
-                                Padding="6,1,8,1" Margin="2,0">
-                            <ContentPresenter VerticalAlignment="Center" />
+                        <Border x:Name="Bd" Background="{TemplateBinding Background}" CornerRadius="16" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter VerticalAlignment="Center" HorizontalAlignment="Center" />
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="Bd" Property="Background" Value="#40FFFFFF" />
+                                <Setter TargetName="Bd" Property="Background" Value="{StaticResource HoverBg}" />
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -30,16 +47,113 @@
             </Setter>
         </Style>
 
-        <Style x:Key="FlatButton" TargetType="Button">
-            <Setter Property="Padding" Value="10,4" />
+        <!-- 바로가기 타일 -->
+        <Style x:Key="TileButton" TargetType="Button">
+            <Setter Property="Foreground" Value="{StaticResource Ink}" />
+            <Setter Property="Background" Value="#1A1D23" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Focusable" Value="False" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd" Background="{TemplateBinding Background}" CornerRadius="10" Padding="6,8"
+                                BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}">
+                            <ContentPresenter VerticalAlignment="Center" HorizontalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#262A33" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- 작업 창 버튼 -->
+        <Style x:Key="DarkButton" TargetType="Button">
+            <Setter Property="Foreground" Value="{StaticResource Ink}" />
+            <Setter Property="Background" Value="{StaticResource RaisedBg}" />
+            <Setter Property="BorderBrush" Value="{StaticResource LineStrong}" />
+            <Setter Property="Padding" Value="12,6" />
             <Setter Property="Margin" Value="0,0,6,6" />
-            <Setter Property="MinWidth" Value="80" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="1" CornerRadius="8" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter VerticalAlignment="Center" HorizontalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#2C313B" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="Bd" Property="Opacity" Value="0.45" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style x:Key="PrimaryButton" TargetType="Button" BasedOn="{StaticResource DarkButton}">
+            <Setter Property="Background" Value="{StaticResource Accent}" />
+            <Setter Property="Foreground" Value="{StaticResource AccentInk}" />
+            <Setter Property="BorderBrush" Value="{StaticResource Accent}" />
+        </Style>
+
+        <!-- 사이드바 탭 -->
+        <Style x:Key="NavButton" TargetType="RadioButton">
+            <Setter Property="Width" Value="44" />
+            <Setter Property="Height" Value="44" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Foreground" Value="{StaticResource Muted}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="RadioButton">
+                        <Border x:Name="Bd" Background="Transparent" CornerRadius="10">
+                            <ContentPresenter VerticalAlignment="Center" HorizontalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#20232A" />
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{StaticResource RaisedBg}" />
+                                <Setter Property="Foreground" Value="{StaticResource Accent}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="DarkTextBox" TargetType="TextBox">
+            <Setter Property="Foreground" Value="{StaticResource Ink}" />
+            <Setter Property="Background" Value="#15171C" />
+            <Setter Property="BorderBrush" Value="{StaticResource LineStrong}" />
+            <Setter Property="CaretBrush" Value="{StaticResource Ink}" />
+            <Setter Property="Padding" Value="6,4" />
+        </Style>
+
+        <Style x:Key="DarkCheck" TargetType="CheckBox">
+            <Setter Property="Foreground" Value="{StaticResource Ink}" />
+            <Setter Property="Margin" Value="0,0,0,10" />
+        </Style>
+
+        <Style TargetType="ToolTip">
+            <Setter Property="Background" Value="#0C0D10" />
+            <Setter Property="Foreground" Value="{StaticResource Ink}" />
+            <Setter Property="BorderBrush" Value="{StaticResource Line}" />
+            <Setter Property="Padding" Value="10,6" />
         </Style>
 
         <Style x:Key="SectionTitle" TargetType="TextBlock">
             <Setter Property="FontWeight" Value="SemiBold" />
-            <Setter Property="Margin" Value="0,10,0,4" />
-            <Setter Property="Foreground" Value="#444" />
+            <Setter Property="Margin" Value="0,14,0,6" />
+            <Setter Property="Foreground" Value="{StaticResource Muted}" />
+            <Setter Property="FontSize" Value="12" />
         </Style>
     </Application.Resources>
 </Application>

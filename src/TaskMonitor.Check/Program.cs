@@ -17,6 +17,9 @@ for (int i = 0; i < args.Length; i++)
         case "--watch": watch = double.Parse(args[++i], System.Globalization.CultureInfo.InvariantCulture); break;
         case "--count": count = int.Parse(args[++i]); break;
         case "--detail": detail = true; break;
+        case "--shortcut-selftest":
+            Environment.Exit(ShortcutSelfTest.Run(args[++i]));
+            return;
         case "--discover":
             {
                 // 진단: 보이는 python 프로세스와, 자동 감지 코드가 무엇을 기록하는지 출력

@@ -63,12 +63,16 @@ public partial class App : Application
         if (show) ShowMain(null);
     }
 
-    public void ShowMain(string? selectTaskId)
+    public BarWindow? Bar => _bar;
+
+    /// <param name="page">"tasks"(기본) | "shortcuts" | "settings"</param>
+    public void ShowMain(string? selectTaskId, string? page = null)
     {
         _main ??= new MainWindow(Controller);
         if (!_main.IsVisible) _main.Show();
         if (_main.WindowState == WindowState.Minimized) _main.WindowState = WindowState.Normal;
         _main.Activate();
+        if (page is not null) _main.ShowPage(page);
         if (selectTaskId is not null) _main.Select(selectTaskId);
     }
 

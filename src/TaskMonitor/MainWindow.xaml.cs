@@ -1,17 +1,20 @@
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Interop;
 using TaskMonitor.Core;
 
 namespace TaskMonitor;
 
-/// <summary>작업 목록 + 선택한 작업 상세. 닫으면 숨기기만 하고 상단 바와 작업은 그대로.</summary>
+/// <summary>작업 창 (시안 B, 다크). 사이드바: 작업 / 바로가기 / 설정. 닫으면 숨기기만 하고 캡슐과 작업은 그대로.</summary>
 public partial class MainWindow : Window
 {
     private readonly MonitorController _c;
     private bool _forceClose;
     private string? _logKey;
     private bool _autoSelect;
+    private bool _loadingSettings;
 
     public MainWindow(MonitorController c)
     {
@@ -19,7 +22,7 @@ public partial class MainWindow : Window
         _c = c;
         DataContext = c;
         var s = c.Settings;
-        if (s.MainWidth is > 400 && s.MainHeight is > 300)
+        if (s.MainWidth is > 600 && s.MainHeight is > 400)
         {
             Width = s.MainWidth.Value;
             Height = s.MainHeight.Value;
@@ -33,10 +36,54 @@ public partial class MainWindow : Window
             Left = l;
             Top = t;
         }
-        StateDirRun.Text = Paths.Tasks;
+        StateDirText.Text = Paths.Tasks;
         c.Updated += OnUpdated;
+        c.Shortcuts.Items.CollectionChanged += (_, _) => UpdateShortcutsEmpty();
+        UpdateShortcutsEmpty();
         Closing += OnClosing;
+        SourceInitialized += (_, _) => UseDarkTitleBar();
         _autoSelect = true;
+    }
+
+    // ---------------------------------------------------------------- 다크 제목 표시줄 (Windows 10 20H1+ / 11)
+    [DllImport("dwmapi.dll")] private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int value, int size);
+
+    private void UseDarkTitleBar()
+    {
+        try
+        {
+            var h = new WindowInteropHelper(this).Handle;
+            int on = 1;
+            if (DwmSetWindowAttribute(h, 20, ref on, sizeof(int)) != 0) DwmSetWindowAttribute(h, 19, ref on, sizeof(int));
+            int caption = 0x00241E1B; // COLORREF(BGR) = #1B1E24 (Windows 11 에서만 적용)
+            DwmSetWindowAttribute(h, 35, ref caption, sizeof(int));
+        }
+        catch { /* 지원하지 않는 Windows: 기본 제목 표시줄 */ }
+    }
+
+    // ---------------------------------------------------------------- 페이지
+    /// <param name="page">"tasks" | "shortcuts" | "settings"</param>
+    public void ShowPage(string page)
+    {
+        var nav = page switch { "shortcuts" => NavShortcuts, "settings" => NavSettings, _ => NavTasks };
+        if (nav.IsChecked == true) ApplyPage(page);
+        else nav.IsChecked = true; // Nav_Checked → ApplyPage
+    }
+
+    private void Nav_Checked(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement { Tag: string page }) ApplyPage(page);
+    }
+
+    private void ApplyPage(string page)
+    {
+        if (PageTasks is null || PageShortcuts is null || PageSettings is null) return; // InitializeComponent 도중
+        PageTasks.Visibility = page == "tasks" ? Visibility.Visible : Visibility.Collapsed;
+        PageShortcuts.Visibility = page == "shortcuts" ? Visibility.Visible : Visibility.Collapsed;
+        PageSettings.Visibility = page == "settings" ? Visibility.Visible : Visibility.Collapsed;
+        if (page == "shortcuts") _c.Shortcuts.RefreshExists();
+        if (page == "settings") LoadSettings();
+        if (page == "tasks") RefreshDetail();
     }
 
     private TaskItem? Selected => List.SelectedItem as TaskItem;
@@ -45,6 +92,8 @@ public partial class MainWindow : Window
     {
         var item = _c.Items.FirstOrDefault(i => string.Equals(i.Id, id, StringComparison.OrdinalIgnoreCase));
         if (item is null) return;
+        ShowPage("tasks");
+        _autoSelect = false;
         List.SelectedItem = item;
         List.ScrollIntoView(item);
     }
@@ -70,8 +119,10 @@ public partial class MainWindow : Window
         Close();
     }
 
+    // ---------------------------------------------------------------- 작업
     private void List_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
+        if (List.SelectedItem is not null) _autoSelect = false;
         _logKey = null;
         RefreshDetail();
     }
@@ -84,8 +135,9 @@ public partial class MainWindow : Window
             List.SelectedIndex = 0;
             _autoSelect = false;
         }
-        ErrorRun.Text = _c.LastError.Length > 0 ? "  " + _c.LastError : "";
-        if (IsVisible) RefreshDetail();
+        LastErrorText.Text = _c.LastError;
+        LastErrorText.Visibility = _c.LastError.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
+        if (IsVisible && PageTasks.Visibility == Visibility.Visible) RefreshDetail();
     }
 
     private void RefreshDetail()
@@ -94,6 +146,9 @@ public partial class MainWindow : Window
         bool has = item is not null;
         Detail.Visibility = has ? Visibility.Visible : Visibility.Collapsed;
         EmptyHint.Visibility = has ? Visibility.Collapsed : Visibility.Visible;
+        EmptyHint.Text = _c.Items.Count == 0
+            ? "아직 보이는 작업이 없습니다.\n\n상태 파일을 쓰는 작업(taskstate.py)이나, 실행 중인 Python 작업(자동 감지)이 생기면 여기에 나타납니다."
+            : "왼쪽에서 작업을 고르세요.";
         if (!ReferenceEquals(Detail.DataContext, item)) Detail.DataContext = item;
         if (item is null) return;
         var v = item.V;
@@ -105,6 +160,7 @@ public partial class MainWindow : Window
         BtnOpenLog.IsEnabled = !string.IsNullOrEmpty(v.LogPath) && File.Exists(v.LogPath);
         BtnCancel.IsEnabled = v.CancelSupported && !v.CancelRequested;
         BtnCancel.Content = !v.CancelSupported && !v.IsTerminal ? "중단 요청 (미지원)" : v.CancelRequested ? "중단 요청됨" : "중단 요청";
+        BtnCancel.Visibility = v.IsTerminal ? Visibility.Collapsed : Visibility.Visible;
         BtnArchive.IsEnabled = v.CanArchive;
 
         // 로그는 파일이 바뀌었을 때만 다시 읽음
@@ -116,7 +172,7 @@ public partial class MainWindow : Window
         catch { }
         if (key == _logKey) return;
         _logKey = key;
-        LogPathRun.Text = string.IsNullOrEmpty(v.LogPath) ? "(로그 경로 기록 없음)" : v.LogPath;
+        LogPathRun.Text = "   " + (string.IsNullOrEmpty(v.LogPath) ? "(로그 경로 기록 없음)" : v.LogPath);
         string tail = TaskFiles.ReadTail(v.LogPath, 80, out bool exists);
         if (!string.IsNullOrEmpty(v.LogPath) && !exists) tail = "(로그 파일이 아직 없습니다)";
         bool atEnd = LogBox.VerticalOffset + LogBox.ViewportHeight >= LogBox.ExtentHeight - 4;
@@ -135,15 +191,14 @@ public partial class MainWindow : Window
         e.Handled = true;
     }
 
-    // ---------------------------------------------------------------- actions
     private static void ShellOpen(string path)
     {
-        try { Process.Start(new ProcessStartInfo(path) { UseShellExecute = true }); }
+        try { Process.Start(new ProcessStartInfo(path) { UseShellExecute = true })?.Dispose(); }
         catch (Exception ex)
         {
             if (File.Exists(path))
             {
-                try { Process.Start(new ProcessStartInfo("notepad.exe", $"\"{path}\"") { UseShellExecute = true }); return; }
+                try { Process.Start(new ProcessStartInfo("notepad.exe", $"\"{path}\"") { UseShellExecute = true })?.Dispose(); return; }
                 catch { }
             }
             MessageBox.Show($"열지 못했습니다: {path}\n{ex.Message}", "TaskMonitor");
@@ -153,14 +208,14 @@ public partial class MainWindow : Window
     private static void ShowInFolder(string path)
     {
         if (Directory.Exists(path) && !File.Exists(path))
-            Process.Start(new ProcessStartInfo("explorer.exe", $"\"{path}\"") { UseShellExecute = true });
+            Process.Start(new ProcessStartInfo("explorer.exe", $"\"{path}\"") { UseShellExecute = true })?.Dispose();
         else if (File.Exists(path))
-            Process.Start(new ProcessStartInfo("explorer.exe", $"/select,\"{path}\"") { UseShellExecute = true });
+            Process.Start(new ProcessStartInfo("explorer.exe", $"/select,\"{path}\"") { UseShellExecute = true })?.Dispose();
         else
         {
             string? parent = System.IO.Path.GetDirectoryName(path);
             if (parent is not null && Directory.Exists(parent))
-                Process.Start(new ProcessStartInfo("explorer.exe", $"\"{parent}\"") { UseShellExecute = true });
+                Process.Start(new ProcessStartInfo("explorer.exe", $"\"{parent}\"") { UseShellExecute = true })?.Dispose();
             else MessageBox.Show($"경로가 없습니다: {path}", "TaskMonitor");
         }
     }
@@ -210,7 +265,12 @@ public partial class MainWindow : Window
         ShowInFolder(Paths.Tasks);
     }
 
-    private void ExitMonitor_Click(object sender, RoutedEventArgs e) => App.Current.ExitApp();
+    private void ExitMonitor_Click(object sender, RoutedEventArgs e)
+    {
+        var ok = MessageBox.Show(this, "모니터를 종료할까요?\n\n실행 중인 작업은 멈추지 않고 계속 돕니다. 다시 실행하면 현재 상태를 그대로 보여 줍니다.",
+            "모니터 종료", MessageBoxButton.YesNo, MessageBoxImage.Question);
+        if (ok == MessageBoxResult.Yes) App.Current.ExitApp();
+    }
 
     private void Cancel_Click(object sender, RoutedEventArgs e)
     {
@@ -236,5 +296,149 @@ public partial class MainWindow : Window
         try { TaskFiles.Archive(v.Id); }
         catch (Exception ex) { MessageBox.Show("옮기지 못했습니다: " + ex.Message, "TaskMonitor"); }
         _c.Tick();
+    }
+
+    // ---------------------------------------------------------------- 바로가기
+    private void UpdateShortcutsEmpty() =>
+        ShortcutsEmpty.Visibility = _c.Shortcuts.Items.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+
+    private static ShortcutVm? VmOf(object sender) => (sender as FrameworkElement)?.Tag as ShortcutVm;
+
+    private void AddPaths(IEnumerable<string> paths)
+    {
+        var failed = _c.Shortcuts.Add(paths);
+        if (failed.Count > 0)
+            MessageBox.Show(this, "등록하지 못했습니다 (경로 없음 또는 지원하지 않는 형식):\n" + string.Join("\n", failed), "TaskMonitor");
+    }
+
+    private void AddFile_Click(object sender, RoutedEventArgs e)
+    {
+        var dlg = new Microsoft.Win32.OpenFileDialog
+        {
+            Title = "바로가기로 등록할 파일·앱",
+            Multiselect = true,
+            DereferenceLinks = false, // .lnk 를 그대로 등록 (원래 인자·시작 폴더 유지)
+            Filter = "앱·바로가기 (*.exe;*.lnk;*.url;*.bat;*.cmd)|*.exe;*.lnk;*.url;*.bat;*.cmd|모든 파일 (*.*)|*.*",
+        };
+        if (dlg.ShowDialog(this) == true) AddPaths(dlg.FileNames);
+    }
+
+    private void AddFolder_Click(object sender, RoutedEventArgs e)
+    {
+        var dlg = new Microsoft.Win32.OpenFolderDialog { Title = "바로가기로 등록할 폴더", Multiselect = true };
+        if (dlg.ShowDialog(this) == true) AddPaths(dlg.FolderNames);
+    }
+
+    private void AddUrl_Click(object sender, RoutedEventArgs e)
+    {
+        string u = UrlBox.Text.Trim();
+        if (u.Length == 0) return;
+        if (!u.Contains("://")) u = "https://" + u;
+        if (!Uri.TryCreate(u, UriKind.Absolute, out var uri) || (uri.Scheme != "http" && uri.Scheme != "https"))
+        {
+            MessageBox.Show(this, "http:// 또는 https:// 웹 주소만 등록할 수 있습니다.", "TaskMonitor");
+            return;
+        }
+        AddPaths(new[] { u });
+        UrlBox.Text = "";
+    }
+
+    private void Shortcuts_DragEnter(object sender, DragEventArgs e)
+    {
+        bool ok = e.Data.GetDataPresent(DataFormats.FileDrop) || e.Data.GetDataPresent(DataFormats.UnicodeText);
+        e.Effects = ok ? DragDropEffects.Link : DragDropEffects.None;
+        e.Handled = true;
+    }
+
+    private void Shortcuts_Drop(object sender, DragEventArgs e)
+    {
+        e.Handled = true;
+        if (e.Data.GetData(DataFormats.FileDrop) is string[] files && files.Length > 0)
+            AddPaths(files);
+        else if (e.Data.GetData(DataFormats.UnicodeText) is string text &&
+                 (text.StartsWith("http://", StringComparison.OrdinalIgnoreCase) || text.StartsWith("https://", StringComparison.OrdinalIgnoreCase)))
+            AddPaths(new[] { text.Trim() });
+    }
+
+    private void ShortcutRun_Click(object sender, RoutedEventArgs e)
+    {
+        if (VmOf(sender) is { } vm && _c.Shortcuts.Launch(vm) is string err)
+            MessageBox.Show(this, err, "TaskMonitor", MessageBoxButton.OK, MessageBoxImage.Information);
+    }
+
+    private void ShortcutReveal_Click(object sender, RoutedEventArgs e)
+    {
+        if (VmOf(sender) is { } vm) ShortcutStore.RevealInExplorer(vm.Item);
+    }
+
+    private void ShortcutUp_Click(object sender, RoutedEventArgs e)
+    {
+        if (VmOf(sender) is { } vm) _c.Shortcuts.Move(vm, -1);
+    }
+
+    private void ShortcutDown_Click(object sender, RoutedEventArgs e)
+    {
+        if (VmOf(sender) is { } vm) _c.Shortcuts.Move(vm, +1);
+    }
+
+    private void ShortcutRemove_Click(object sender, RoutedEventArgs e)
+    {
+        if (VmOf(sender) is { } vm) _c.Shortcuts.Remove(vm); // 바로가기만 지움. 대상 파일·폴더는 그대로
+    }
+
+    // ---------------------------------------------------------------- 설정
+    private void LoadSettings()
+    {
+        _loadingSettings = true;
+        try
+        {
+            var s = _c.Settings;
+            foreach (var rb in PlacementGrid.Children.OfType<RadioButton>())
+                rb.IsChecked = rb.Tag is string t && t == s.Placement.ToString();
+            ChkTopmost.IsChecked = s.Topmost;
+            ChkFullscreen.IsChecked = s.HideOnFullscreen;
+            ChkAuto.IsChecked = s.AutoDetect;
+            ChkAutostart.IsChecked = Autostart.IsEnabled;
+        }
+        finally { _loadingSettings = false; }
+    }
+
+    private void Placement_Checked(object sender, RoutedEventArgs e)
+    {
+        if (_loadingSettings) return;
+        if (sender is FrameworkElement { Tag: string tag } && Enum.TryParse<BarPlacement>(tag, out var p))
+        {
+            if (App.Current.Bar is { } bar) bar.SetPlacement(p);
+            else { _c.Settings.Placement = p; _c.Settings.Save(); }
+        }
+    }
+
+    private void Setting_Click(object sender, RoutedEventArgs e)
+    {
+        if (_loadingSettings) return;
+        var s = _c.Settings;
+        if (sender == ChkTopmost)
+        {
+            bool on = ChkTopmost.IsChecked == true;
+            if (App.Current.Bar is { } bar) bar.SetTopmost(on);
+            else { s.Topmost = on; s.Save(); }
+        }
+        else if (sender == ChkFullscreen)
+        {
+            s.HideOnFullscreen = ChkFullscreen.IsChecked == true;
+            s.Save();
+        }
+        else if (sender == ChkAuto)
+        {
+            s.AutoDetect = ChkAuto.IsChecked == true;
+            s.Save();
+            _c.Tick();
+        }
+        else if (sender == ChkAutostart)
+        {
+            try { Autostart.Set(ChkAutostart.IsChecked == true); }
+            catch (Exception ex) { MessageBox.Show(this, "시작 프로그램 등록에 실패했습니다: " + ex.Message, "TaskMonitor"); }
+            ChkAutostart.IsChecked = Autostart.IsEnabled;
+        }
     }
 }

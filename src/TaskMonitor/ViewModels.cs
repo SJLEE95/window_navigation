@@ -22,6 +22,7 @@ public abstract class Observable : INotifyPropertyChanged
     }
 }
 
+/// <summary>시안 B (다크 캡슐) 색. 색은 보조 수단이고 항상 기호·글자를 함께 표시.</summary>
 public static class Theme
 {
     private static SolidColorBrush B(string hex)
@@ -31,16 +32,18 @@ public static class Theme
         return b;
     }
 
-    // 색은 보조 수단. 항상 기호 + 상태 이름 글자를 함께 표시.
-    public static readonly Brush Pending = B("#8A8F98");
-    public static readonly Brush Waiting = B("#A78BFA");
-    public static readonly Brush Running = B("#4C9AFF");
-    public static readonly Brush Validating = B("#2DD4BF");
-    public static readonly Brush Succeeded = B("#3FB950");
-    public static readonly Brush Failed = B("#F85149");
-    public static readonly Brush Cancelled = B("#F0883E");
-    public static readonly Brush Warning = B("#E3B341");
-    public static readonly Brush Exited = B("#8FA3B8");
+    public static readonly Brush Pending = B("#8A93A3");
+    public static readonly Brush Waiting = B("#B4A2F5");
+    public static readonly Brush Running = B("#8AB4FF");
+    public static readonly Brush Validating = B("#5FD4C4");
+    public static readonly Brush Succeeded = B("#9ECE6A");
+    public static readonly Brush Failed = B("#FF8FA3");
+    public static readonly Brush Cancelled = B("#F0A35E");
+    public static readonly Brush Warning = B("#F2C66D");
+    public static readonly Brush Exited = B("#8A93A3");
+    public static readonly Brush WarningBg = B("#3A2E16");
+    public static readonly Brush FailedBg = B("#3B1C22");
+    public static readonly Brush Track = B("#2F343E");
 
     public static Brush For(StatusKind k) => k switch
     {
@@ -72,51 +75,85 @@ public sealed class TaskItem : Observable
         set
         {
             _v = value;
-            Raise();
-            Raise(nameof(Brush));
-            Raise(nameof(ProgressValue));
-            Raise(nameof(HasProgress));
-            Raise(nameof(HasWarnings));
-            Raise(nameof(WarningsText));
-            Raise(nameof(HasError));
-            Raise(nameof(HasWaiting));
-            Raise(nameof(ProjectLine));
+            Raise(string.Empty); // 모든 파생 속성 갱신
         }
     }
 
     public Brush Brush => Theme.For(_v.Kind);
     public double ProgressValue => _v.OverallPercent ?? _v.StagePercent ?? (_v.Kind == StatusKind.Succeeded ? 100 : 0);
     public bool HasProgress => _v.OverallPercent is not null || _v.StagePercent is not null || _v.Kind == StatusKind.Succeeded;
+
+    /// <summary>카드의 진행 링 값. 근거가 없으면 NaN (바탕 원만)</summary>
+    public double RingValue => _v.Kind == StatusKind.Succeeded ? 100
+        : (_v.OverallPercent ?? _v.StagePercent) is double p ? p : double.NaN;
+
+    /// <summary>링 가운데 글자: 진행률 또는 상태 기호</summary>
+    public string RingText => _v.Kind switch
+    {
+        StatusKind.Succeeded => "✓",
+        StatusKind.Failed => "✕",
+        StatusKind.Cancelled or StatusKind.Exited => "■",
+        _ when (_v.OverallPercent ?? _v.StagePercent) is double p => Fmt.Pct(p / 100),
+        StatusKind.Waiting or StatusKind.Pending => "⏸",
+        StatusKind.Warning => "!",
+        _ => "…",
+    };
+
+    public string CardTitle => _v.IsAuto && _v.Subject.Length > 0 ? $"{_v.Name.Split(' ')[0]} · {_v.Subject}" : _v.Name;
+
+    /// <summary>카드 둘째 줄: 상태 + 현재 단계·처리량</summary>
+    public string CardLine2
+    {
+        get
+        {
+            var cur = _v.Stages.FirstOrDefault(s => s.IsCurrent);
+            var parts = new List<string> { _v.StatusLabel };
+            if (!_v.IsTerminal && _v.StageShort.Length > 0 && _v.StageShort != "실행") parts.Add(_v.StageShort);
+            if (cur is not null && cur.Amount.Length > 0) parts.Add(cur.Amount);
+            return string.Join(" · ", parts);
+        }
+    }
+
+    /// <summary>카드 셋째 줄: 예상 완료 또는 끝난 시각</summary>
+    public string CardLine3 => _v.IsTerminal || !_v.IsActive
+        ? (_v.FinishedAt is DateTimeOffset f ? $"{f.ToLocalTime():HH:mm} · {_v.TimesText}" : _v.UpdatedText)
+        : _v.EtaShort.StartsWith('≈') ? $"{_v.EtaShort} 완료 예상" : $"예상 완료: {_v.EtaShort}";
+
+    public bool IsDimmed => _v.IsTerminal && _v.Kind is not (StatusKind.Failed or StatusKind.Warning);
+    public double CardOpacity => IsDimmed ? 0.72 : 1.0;
+    public string CurrentAmount => _v.Stages.FirstOrDefault(s => s.IsCurrent)?.Amount is { Length: > 0 } a ? a : "-";
+    public string CurrentRate => _v.Stages.FirstOrDefault(s => s.IsCurrent)?.RateText ?? "";
     public bool HasWarnings => _v.Warnings.Count > 0;
-    public string WarningsText => string.Join("\n", _v.Warnings.Select(w => "⚠ " + w));
+    public string WarningsText => string.Join("\n", _v.Warnings);
     public bool HasError => _v.ErrorText.Length > 0;
     public bool HasWaiting => _v.WaitingText.Length > 0;
-    public string ProjectLine => string.Join("   ", new[]
+    public bool HasMessage => _v.Message.Length > 0;
+    public string ProjectLine => string.Join("  ·  ", new[]
     {
         _v.IsAuto ? "자동 감지" : "",
-        _v.Project.Length > 0 ? "프로젝트: " + _v.Project : "",
-        _v.Subject.Length > 0 ? "입력: " + _v.Subject : "",
-        "ID: " + _v.Id,
+        _v.Project,
+        _v.Subject.Length > 0 ? "입력 " + _v.Subject : "",
     }.Where(s => s.Length > 0));
 }
 
+/// <summary>캡슐 바의 작업 표시 한 개 (진행 링 또는 경고·실패 알약)</summary>
 public sealed class BarChip
 {
     public string TaskId { get; init; } = "";
-    public string Symbol { get; init; } = "";
-    public string Label { get; init; } = "";
-    public string Text { get; init; } = "";
+    public bool IsRing { get; init; }
+    public bool IsPill => !IsRing;
+    public double Ring { get; init; } = double.NaN;
+    public string Title { get; init; } = "";
+    public string Sub { get; init; } = "";
+    public string Eta { get; init; } = "";
+    public string PillText { get; init; } = "";
+    public Brush Brush { get; init; } = Theme.Pending;
+    public Brush PillBg { get; init; } = Theme.WarningBg;
     public string Tooltip { get; init; } = "";
-    public Brush Brush { get; init; } = Theme.Pending;
+    public string Key => $"{TaskId}|{IsRing}|{Math.Round(Ring)}|{Title}|{Sub}|{Eta}|{PillText}|{Tooltip}";
 }
 
-public sealed class SummaryPart
-{
-    public string Text { get; init; } = "";
-    public Brush Brush { get; init; } = Theme.Pending;
-}
-
-/// <summary>1초마다 상태 폴더를 확인하고 목록·상단 바 데이터를 갱신.</summary>
+/// <summary>1초마다 상태 폴더를 확인하고 목록·바 데이터를 갱신.</summary>
 public sealed class MonitorController : Observable
 {
     private readonly TaskStore _store = new();
@@ -128,12 +165,20 @@ public sealed class MonitorController : Observable
 
     public ObservableCollection<TaskItem> Items { get; } = new();
     public ObservableCollection<BarChip> Chips { get; } = new();
-    public ObservableCollection<SummaryPart> Summary { get; } = new();
+    public ShortcutsController Shortcuts { get; } = new();
     public AppSettings Settings { get; }
     public event Action? Updated;
 
     private string _overflow = "";
     public string Overflow { get => _overflow; private set => Set(ref _overflow, value); }
+
+    private string _summaryText = "";
+    /// <summary>"실행 2 · 대기 1 · 확인 1 · 실패 1"</summary>
+    public string SummaryText { get => _summaryText; private set => Set(ref _summaryText, value); }
+
+    private bool _isIdle;
+    /// <summary>바에 보여줄 작업이 없음</summary>
+    public bool IsIdle { get => _isIdle; private set => Set(ref _isIdle, value); }
 
     public string LastError { get => _lastError; private set => Set(ref _lastError, value); }
 
@@ -146,6 +191,7 @@ public sealed class MonitorController : Observable
 
     public void Start()
     {
+        Shortcuts.Load();
         Tick();
         _timer.Start();
     }
@@ -205,69 +251,67 @@ public sealed class MonitorController : Observable
         }
     }
 
+    private static string ChipTitle(TaskView v) =>
+        v.IsAuto ? Fmt.Trim(System.IO.Path.GetFileNameWithoutExtension(v.Name.Split(' ')[0]), 16) : Fmt.Trim(v.Name, 18);
+
+    private static string TooltipOf(TaskView v) =>
+        $"{v.Name}\n{v.StatusLabel}\n{v.StageText}\n진행률: {v.ProgressText}\n예상 완료: {v.EtaShort}\n{v.UpdatedText}"
+        + (v.Warnings.Count > 0 ? "\n" + string.Join("\n", v.Warnings) : "") + "\n\n클릭: 상세 보기";
+
     private void BuildBar(List<TaskView> views, DateTimeOffset now)
     {
         int running = views.Count(v => v.IsActive && v.Kind is StatusKind.Running or StatusKind.Validating);
         int waiting = views.Count(v => v.IsActive && v.Kind is StatusKind.Waiting or StatusKind.Pending);
-        int warn = views.Count(v => v.Kind == StatusKind.Warning);
-        int failed = views.Count(v => v.Kind == StatusKind.Failed);
+        var warnList = views.Where(v => v.Kind == StatusKind.Warning && (v.IsActive || v.ExitedNoRecord ||
+                                        (v.FinishedAt is DateTimeOffset wf && now - wf < TimeSpan.FromHours(12)))).ToList();
+        var failList = views.Where(v => v.Kind == StatusKind.Failed &&
+                                        v.FinishedAt is DateTimeOffset ff && now - ff < TimeSpan.FromHours(12)).ToList();
         int done = views.Count(v => v.Kind == StatusKind.Succeeded);
-        int exited = views.Count(v => v.Kind == StatusKind.Exited);
-        var parts = new List<SummaryPart>();
-        if (running > 0) parts.Add(new SummaryPart { Text = $"▶ 실행 {running}", Brush = Theme.Running });
-        if (waiting > 0) parts.Add(new SummaryPart { Text = $"⏸ 대기 {waiting}", Brush = Theme.Waiting });
-        if (warn > 0) parts.Add(new SummaryPart { Text = $"⚠ 확인 {warn}", Brush = Theme.Warning });
-        if (failed > 0) parts.Add(new SummaryPart { Text = $"✕ 실패 {failed}", Brush = Theme.Failed });
-        if (done > 0) parts.Add(new SummaryPart { Text = $"✔ 완료 {done}", Brush = Theme.Succeeded });
-        if (exited > 0) parts.Add(new SummaryPart { Text = $"◼ 종료 {exited}", Brush = Theme.Exited });
-        if (parts.Count == 0) parts.Add(new SummaryPart { Text = "작업 없음", Brush = Theme.Pending });
-        Replace(Summary, parts, (a, b) => a.Text == b.Text);
+        var parts = new List<string>();
+        if (running > 0) parts.Add($"실행 {running}");
+        if (waiting > 0) parts.Add($"대기 {waiting}");
+        if (warnList.Count > 0) parts.Add($"확인 {warnList.Count}");
+        if (failList.Count > 0) parts.Add($"실패 {failList.Count}");
+        if (done > 0) parts.Add($"완료 {done}");
+        SummaryText = parts.Count == 0 ? "작업 없음" : string.Join(" · ", parts);
 
-        var recent = TimeSpan.FromMinutes(Math.Max(1, Settings.RecentFinishedMinutes));
-        // 바에는 주의가 필요한 것 → 실행 중 → 대기 → 최근 완료 순으로 표시
-        var chipViews = views.Where(v =>
-                v.IsActive ||
-                (v.ExitedNoRecord && now - v.SortTime < TimeSpan.FromHours(12)) ||
-                (v.FinishedAt is DateTimeOffset f && now - f < recent &&
-                 (Settings.ShowRecentFinished || v.Kind != StatusKind.Succeeded)))
-            .OrderBy(ChipPriority).ThenByDescending(v => v.SortTime).ToList();
+        // 진행 링: 실행·검증·대기 중인 작업 (최근 시작 순)
+        var ringViews = views.Where(v => v.IsActive && v.Kind is StatusKind.Running or StatusKind.Validating
+                                                                 or StatusKind.Waiting or StatusKind.Pending)
+                             .OrderBy(v => v.Kind is StatusKind.Waiting or StatusKind.Pending ? 1 : 0)
+                             .ThenByDescending(v => v.SortTime).ToList();
         int max = Math.Max(1, Settings.MaxChips);
-        var chips = chipViews.Take(max).Select(v => new BarChip
+        var chips = ringViews.Take(max).Select(v => new BarChip
         {
             TaskId = v.Id,
-            Symbol = v.Symbol,
-            Label = v.StatusShort,
+            IsRing = true,
+            Ring = v.OverallPercent ?? v.StagePercent ?? double.NaN,
+            Title = ChipTitle(v),
+            Sub = v.IsAuto ? v.Subject : "",
+            Eta = v.Kind is StatusKind.Waiting or StatusKind.Pending ? "대기"
+                : v.EtaShort.StartsWith('≈') ? v.EtaShort.Replace(" (단계)", "") : "",
             Brush = Theme.For(v.Kind),
-            Text = ChipText(v),
-            Tooltip = $"{v.Name}\n{v.StatusLabel}\n{v.StageText}\n진행률: {v.ProgressText}\n예상 완료: {v.EtaShort}\n{v.UpdatedText}"
-                      + (v.Warnings.Count > 0 ? "\n" + string.Join("\n", v.Warnings) : "") + "\n\n클릭: 상세 보기",
+            Tooltip = TooltipOf(v),
         }).ToList();
-        Replace(Chips, chips, (a, b) => a.TaskId == b.TaskId && a.Text == b.Text && a.Label == b.Label && a.Tooltip == b.Tooltip);
-        Overflow = chipViews.Count > max ? $"+{chipViews.Count - max}" : "";
-    }
 
-    private static int ChipPriority(TaskView v) => v.Kind switch
-    {
-        StatusKind.Warning => 0,
-        StatusKind.Failed => 1,
-        StatusKind.Running or StatusKind.Validating => 2,
-        StatusKind.Waiting or StatusKind.Pending => 3,
-        _ => 4,
-    };
-
-    private static string ChipText(TaskView v)
-    {
-        // 자동 감지 작업은 이름이 모두 'script.py --...' 로 비슷하므로 스크립트 이름 + 입력(샘플)으로 구분
-        string title = v.IsAuto && v.Subject.Length > 0 ? $"{v.Name.Split(' ')[0]} {v.Subject}" : v.Name;
-        var parts = new List<string> { Fmt.Trim(title, 24) };
-        if (v.IsActive)
-        {
-            double? pct = v.OverallPercent ?? v.StagePercent;
-            if (pct is double p) parts.Add(Fmt.Pct(p / 100));
-            if (v.EtaShort is { Length: > 0 } and not "-") parts.Add(v.EtaShort.Replace(" (단계)", ""));
-        }
-        else if (v.FinishedAt is DateTimeOffset f) parts.Add(f.ToLocalTime().ToString("HH:mm"));
-        return string.Join(" · ", parts);
+        // 경고·실패는 개수 알약으로 (누르면 첫 항목 상세)
+        if (warnList.Count > 0)
+            chips.Add(new BarChip
+            {
+                TaskId = warnList[0].Id, IsRing = false, Brush = Theme.Warning, PillBg = Theme.WarningBg,
+                PillText = warnList.Count == 1 ? $"{warnList[0].StatusShort} 1" : $"확인 필요 {warnList.Count}",
+                Tooltip = string.Join("\n\n", warnList.Take(5).Select(TooltipOf)),
+            });
+        if (failList.Count > 0)
+            chips.Add(new BarChip
+            {
+                TaskId = failList[0].Id, IsRing = false, Brush = Theme.Failed, PillBg = Theme.FailedBg,
+                PillText = $"실패 {failList.Count}",
+                Tooltip = string.Join("\n\n", failList.Take(5).Select(TooltipOf)),
+            });
+        Replace(Chips, chips, (a, b) => a.Key == b.Key);
+        Overflow = ringViews.Count > max ? $"+{ringViews.Count - max}" : "";
+        IsIdle = chips.Count == 0;
     }
 
     private static void Replace<T>(ObservableCollection<T> col, List<T> items, Func<T, T, bool> same)

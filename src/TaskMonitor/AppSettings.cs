@@ -4,11 +4,14 @@ using TaskMonitor.Core;
 
 namespace TaskMonitor;
 
-public enum BarPlacement { TopRight, TopLeft, BottomRight, BottomLeft, DockTop, DockBottom }
+public enum BarPlacement { TopRight, TopLeft, BottomRight, BottomLeft, DockTop, DockBottom, TopCenter, BottomCenter }
 
 public sealed class AppSettings
 {
-    public BarPlacement Placement { get; set; } = BarPlacement.BottomRight;
+    /// <summary>화면 구성 버전. 2 = 시안 B(다크 캡슐). 예전 설정 파일은 처음 한 번 캡슐 기본값으로 옮김.</summary>
+    public int UiVersion { get; set; }  // 파일에 없으면 0 → Load 에서 마이그레이션
+    public const int CurrentUiVersion = 2;
+    public BarPlacement Placement { get; set; } = BarPlacement.TopCenter;
     public bool Topmost { get; set; } = true;
     public bool HideOnFullscreen { get; set; } = true;
     public bool ShowRecentFinished { get; set; } = true;
@@ -37,10 +40,21 @@ public sealed class AppSettings
         try
         {
             if (File.Exists(Paths.Settings))
-                return JsonSerializer.Deserialize<AppSettings>(File.ReadAllText(Paths.Settings), Json.Options) ?? new();
+            {
+                var s = JsonSerializer.Deserialize<AppSettings>(File.ReadAllText(Paths.Settings), Json.Options) ?? new();
+                // ui_version 이 없던 예전 파일 → 0. 캡슐 디자인 기본 자리(위 가운데)로 한 번만 옮김
+                if (s.UiVersion < CurrentUiVersion)
+                {
+                    s.Placement = BarPlacement.TopCenter;
+                    s.BarX = s.BarY = null;
+                    s.MainWidth = s.MainHeight = null;
+                    s.UiVersion = CurrentUiVersion;
+                }
+                return s;
+            }
         }
         catch { /* 손상된 설정은 무시하고 기본값 */ }
-        return new AppSettings();
+        return new AppSettings { UiVersion = CurrentUiVersion };
     }
 
     public void Save()
