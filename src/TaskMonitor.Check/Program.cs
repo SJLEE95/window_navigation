@@ -17,6 +17,9 @@ for (int i = 0; i < args.Length; i++)
         case "--watch": watch = double.Parse(args[++i], System.Globalization.CultureInfo.InvariantCulture); break;
         case "--count": count = int.Parse(args[++i]); break;
         case "--detail": detail = true; break;
+        case "--progress-selftest":
+            Environment.Exit(ProgressSelfTest.Run());
+            return;
         case "--shortcut-selftest":
             Environment.Exit(ShortcutSelfTest.Run(args[++i]));
             return;

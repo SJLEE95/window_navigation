@@ -144,7 +144,7 @@
                     BorderThickness="1" CornerRadius="14">
                 <Grid>
                     <TextBlock x:Name="EmptyHint" Text="왼쪽에서 작업을 고르세요." Foreground="{StaticResource Muted}" Margin="24" />
-                    <ScrollViewer x:Name="Detail" VerticalScrollBarVisibility="Auto" Padding="24,20" Visibility="Collapsed"
+                    <ScrollViewer x:Name="Detail" VerticalScrollBarVisibility="Visible" Padding="24,20" Visibility="Collapsed"
                                   PreviewMouseWheel="Detail_PreviewMouseWheel">
                         <StackPanel>
                             <StackPanel Orientation="Horizontal">
@@ -209,28 +209,34 @@
                             </StackPanel>
 
                             <TextBlock Text="단계" Style="{StaticResource SectionTitle}" />
-                            <ItemsControl ItemsSource="{Binding V.Stages}" Grid.IsSharedSizeScope="True">
+                            <ItemsControl x:Name="StageList" ItemsSource="{Binding V.Stages}">
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate>
-                                        <Grid Margin="0,3">
+                                        <Grid Margin="0,5">
                                             <Grid.ColumnDefinitions>
                                                 <ColumnDefinition Width="28" />
-                                                <ColumnDefinition Width="Auto" SharedSizeGroup="SName" />
-                                                <ColumnDefinition Width="Auto" SharedSizeGroup="SState" />
-                                                <ColumnDefinition Width="Auto" SharedSizeGroup="SAmount" />
                                                 <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="72" />
+                                                <ColumnDefinition Width="56" />
                                             </Grid.ColumnDefinitions>
+                                            <Grid.RowDefinitions>
+                                                <RowDefinition Height="Auto" />
+                                                <RowDefinition Height="Auto" />
+                                            </Grid.RowDefinitions>
                                             <local:Ring Width="18" Height="18" Thickness="3" Track="#2F343E" HorizontalAlignment="Left"
                                                         Value="{Binding Percent, Converter={StaticResource NaN}}"
                                                         Stroke="{Binding Kind, Converter={StaticResource KindBrush}}" />
-                                            <TextBlock Grid.Column="1" Text="{Binding Name}" Margin="0,0,16,0" VerticalAlignment="Center" />
-                                            <TextBlock Grid.Column="2" Text="{Binding StatusLabel}" Margin="0,0,16,0" VerticalAlignment="Center"
-                                                       Foreground="{Binding Kind, Converter={StaticResource KindBrush}}" />
-                                            <TextBlock Grid.Column="3" Margin="0,0,16,0" VerticalAlignment="Center">
-                                                <Run Text="{Binding Amount, Mode=OneWay}" /><Run Text=" " /><Run Text="{Binding PercentText, Mode=OneWay}" Foreground="{StaticResource Muted}" />
-                                            </TextBlock>
-                                            <TextBlock Grid.Column="4" Text="{Binding TimeText}" Foreground="{StaticResource Muted}" FontSize="12"
+                                            <TextBlock Grid.Column="1" Text="{Binding Name}" ToolTip="{Binding Name}" Margin="0,0,12,0"
                                                        VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                                            <TextBlock Grid.Column="2" Text="{Binding StatusLabel}" ToolTip="{Binding StatusLabel}" Margin="0,0,8,0"
+                                                       VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
+                                                       Foreground="{Binding Kind, Converter={StaticResource KindBrush}}" />
+                                            <TextBlock Grid.Column="3" Text="{Binding PercentText}" Foreground="{StaticResource Muted}"
+                                                       HorizontalAlignment="Right" VerticalAlignment="Center" />
+                                            <!-- 가변 길이 수치는 상태 열의 폭에 영향을 주지 않음 -->
+                                            <TextBlock Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="3" Margin="0,2,0,0"
+                                                       Text="{Binding DetailsText}" Foreground="{StaticResource Muted}" FontSize="12" TextWrapping="Wrap"
+                                                       Visibility="{Binding DetailsText, Converter={StaticResource NonEmptyToVis}}" />
                                         </Grid>
                                     </DataTemplate>
                                 </ItemsControl.ItemTemplate>

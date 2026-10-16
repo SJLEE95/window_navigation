@@ -30,6 +30,7 @@ import argparse
 import contextlib
 import datetime as _dt
 import json
+import math
 import os
 import random
 import re
@@ -46,6 +47,7 @@ TERMINAL_STATES = ("succeeded", "failed", "cancelled")
 TASK_STATES = ("pending", "waiting", "running", "validating") + TERMINAL_STATES
 STAGE_STATES = ("pending", "running", "validating", "succeeded", "failed", "skipped", "cancelled")
 INFER_RE = re.compile(r"INFER_PROGRESS_JSON\s+(\{.*\})\s*$")
+PROGRESS_RE = re.compile(r"TASK_PROGRESS_JSON\s+(\{.*\})\s*$")
 _ID_RE = re.compile(r"[^A-Za-z0-9._-]+")
 
 
@@ -570,25 +572,25 @@ class TaskReporter:
         with contextlib.suppress(OSError):
             os.remove(os.path.join(control_dir(self.root), f"{self.id}.cancel"))
 
-    # -- INFER_PROGRESS_JSON 연결
+    # -- 공통 진행 로그 / 기존 추론 로그 연결
     def feed_line(self, line: str, stage: Optional[str] = None, unit: str = "frames") -> bool:
-        """로그 한 줄을 받아 INFER_PROGRESS_JSON 이면 진행률로 반영. 반영했으면 True.
+        """TASK_PROGRESS_JSON / INFER_PROGRESS_JSON 진행률 반영. 반영했으면 True.
 
         JSON에 "stage" 키가 있고 지금 단계와 다르면 지금 단계를 끝내고 그 단계를 시작합니다.
-        "sample" 키가 있으면 처리 중인 입력(subject)으로 표시합니다.
+        공통 형식은 done/total/unit/rate/subject, 기존 형식은 frame/total/fps/sample.
         """
-        info = parse_infer_line(line)
+        info = parse_progress_line(line, infer_unit=unit)
         if info is None:
             return False
+        unit = info["unit"]
         st_key = info.get("stage") or stage
         if st_key and st_key != self._current_stage_key():
             if self._current_stage_key():
                 self.end_stage(self._current_stage_key())
             self.begin_stage(st_key, unit=unit)
-        sample = info.get("sample")
-        self.progress(done=info.get("frame"), total=info.get("total"), stage=st_key, unit=unit,
-                      rate=info.get("fps"), rate_unit=f"{unit}/s" if info.get("fps") is not None else None,
-                      eta_seconds=info.get("eta_seconds"), subject=sample)
+        self.progress(done=info["done"], total=info.get("total"), stage=st_key, unit=unit,
+                      rate=info.get("rate"), rate_unit=f"{unit}/s" if info.get("rate") is not None else None,
+                      eta_seconds=info.get("eta_seconds"), subject=info.get("subject"))
         return True
 
     # -- context manager
@@ -624,6 +626,39 @@ def parse_infer_line(line: str) -> Optional[dict]:
     except json.JSONDecodeError:
         return None
     return info if isinstance(info, dict) else None
+
+
+def parse_progress_line(line: str, infer_unit: str = "frames") -> Optional[dict]:
+    """공통 로그를 정규화. 기존 parse_infer_line API는 그대로 유지합니다."""
+    m = PROGRESS_RE.search(line.strip())
+    if m:
+        try:
+            info = json.loads(m.group(1))
+        except json.JSONDecodeError:
+            return None
+        if not isinstance(info, dict):
+            return None
+        info = {k: info.get(k) for k in ("done", "total", "rate", "eta_seconds", "unit", "subject", "stage")}
+        info["unit"] = info["unit"] if isinstance(info["unit"], str) else "items"
+    else:
+        old = parse_infer_line(line)
+        if old is None:
+            return None
+        info = dict(done=old.get("frame"), total=old.get("total"), rate=old.get("fps"),
+                    eta_seconds=old.get("eta_seconds"), unit=infer_unit,
+                    subject=old.get("sample"), stage=old.get("stage"))
+    for key in ("done", "total", "rate", "eta_seconds"):
+        value = info[key]
+        if value is None and key != "done":
+            continue
+        if type(value) not in (int, float) or not math.isfinite(value) or value < 0:
+            return None
+    if info["total"] is not None and (info["total"] <= 0 or info["done"] > info["total"]):
+        return None
+    for key in ("subject", "stage"):
+        if not isinstance(info[key], str):
+            info[key] = None
+    return info
 
 
 def request_cancel(task_id: str, root: Optional[str] = None) -> str:
@@ -697,7 +732,7 @@ def _tail_lines(path: str, n: int = 15) -> str:
 
 
 def _cmd_wrap(a) -> int:
-    """명령을 실행하고 stdout/stderr 를 로그로 저장, INFER_PROGRESS_JSON 줄을 진행률로 반영."""
+    """명령을 실행하고 stdout/stderr 를 로그로 저장, 공통/추론 진행 로그 반영."""
     cmd = a.command[1:] if a.command and a.command[0] == "--" else a.command
     if not cmd:
         print("실행할 명령이 없습니다: taskstate.py wrap --name X -- python script.py", file=sys.stderr)
@@ -837,7 +872,7 @@ def main(argv: Optional[list] = None) -> int:
     p.add_argument("--result", action="append")
     p.set_defaults(fn=_cmd_set)
 
-    p = sub.add_parser("wrap", help="명령을 실행하며 INFER_PROGRESS_JSON 을 진행률로 반영")
+    p = sub.add_parser("wrap", help="명령을 실행하며 TASK_PROGRESS_JSON / INFER_PROGRESS_JSON 진행률 반영")
     common(p, True)
     p.add_argument("--log", help="로그 파일 경로 ({id} 사용 가능)")
     p.add_argument("--unit", default="frames")

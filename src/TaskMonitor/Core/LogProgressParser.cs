@@ -9,13 +9,15 @@ public sealed record LogProgress(
     string? Sample, string? Stage, string Format, string Line);
 
 /// <summary>
-/// 로그 끝부분에서 마지막 진행 표시를 찾음. 지원 형식은 두 가지뿐:
+/// 로그 끝부분에서 마지막 진행 표시를 찾음. 지원 형식:
+///  0) TASK_PROGRESS_JSON {"done":12,"total":100,"unit":"files","rate":2,"stage":"convert"}
 ///  1) INFER_PROGRESS_JSON {"frame":462,"total":599,"fps":0.78,"eta_seconds":176}
 ///  2) tqdm 진행 표시줄  "sample2:  77%|███████▋  | 462/599 [09:52&lt;02:56,  0.78it/s]"
 /// </summary>
 public static class LogProgressParser
 {
     private static readonly Regex Infer = new(@"INFER_PROGRESS_JSON\s+(\{.*\})", RegexOptions.Compiled);
+    private static readonly Regex TaskProgress = new(@"TASK_PROGRESS_JSON\s+(\{.*\})", RegexOptions.Compiled);
 
     private static readonly Regex Tqdm = new(
         @"(?:(?<desc>[^|\r\n]{1,60}?):\s*)?(?<pct>\d{1,3})%\|[^|]*\|\s*(?<n>[\d.]+[kMG]?)/(?<tot>[\d.]+[kMG]?)\s*\[(?<el>[\d:]+)<(?<rem>[\d:?]+)(?:,\s*(?:(?<rate>[\d.]+)(?<unit>[A-Za-z]+)/s|(?<spi>[\d.]+)s/(?<unit2>[A-Za-z]+)|\?[A-Za-z]*/s))?",
@@ -30,26 +32,31 @@ public static class LogProgressParser
         {
             var line = lines[i];
             if (line.Length < 5) continue;
-            var p = TryInfer(line) ?? TryTqdm(line);
+            var p = TryJson(line, TaskProgress, false) ?? TryJson(line, Infer, true) ?? TryTqdm(line);
             if (p is not null) return p;
         }
         return null;
     }
 
-    private static LogProgress? TryInfer(string line)
+    private static LogProgress? TryJson(string line, Regex pattern, bool infer)
     {
-        var m = Infer.Match(line);
+        var m = pattern.Match(line);
         if (!m.Success) return null;
         try
         {
             using var doc = JsonDocument.Parse(m.Groups[1].Value);
             var r = doc.RootElement;
-            double? Num(string k) => r.TryGetProperty(k, out var v) && v.ValueKind == JsonValueKind.Number ? v.GetDouble() : null;
+            if (r.ValueKind != JsonValueKind.Object) return null;
+            double? Num(string k) => r.TryGetProperty(k, out var v) && v.ValueKind == JsonValueKind.Number && v.TryGetDouble(out var n) && double.IsFinite(n) ? n : null;
             string? Str(string k) => r.TryGetProperty(k, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
-            var frame = Num("frame");
-            if (frame is null) return null;
-            return new LogProgress(frame.Value, Num("total"), Num("fps"), "frames", Num("eta_seconds"),
-                                   Str("sample"), Str("stage"), "INFER_PROGRESS_JSON", line.Trim());
+            foreach (var key in new[] { infer ? "frame" : "done", "total", infer ? "fps" : "rate", "eta_seconds" })
+                if (r.TryGetProperty(key, out var value) && value.ValueKind != JsonValueKind.Null && Num(key) is null) return null;
+            var done = Num(infer ? "frame" : "done");
+            if (done is null or < 0) return null;
+            double? total = Num("total"), rate = Num(infer ? "fps" : "rate"), eta = Num("eta_seconds");
+            if (total is <= 0 || total < done || rate is < 0 || eta is < 0) return null;
+            return new LogProgress(done.Value, total, rate, infer ? "frames" : Str("unit") ?? "items", eta,
+                                   Str(infer ? "sample" : "subject"), Str("stage"), infer ? "INFER_PROGRESS_JSON" : "TASK_PROGRESS_JSON", line.Trim());
         }
         catch (JsonException) { return null; }
     }

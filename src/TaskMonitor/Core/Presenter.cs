@@ -17,6 +17,7 @@ public sealed class StageView
     public string PercentText { get; init; } = "";
     public double? Percent { get; init; }
     public string TimeText { get; init; } = "";
+    public string DetailsText => string.Join(" · ", new[] { Amount, TimeText }.Where(s => s.Length > 0));
     public bool IsCurrent { get; init; }
 }
 

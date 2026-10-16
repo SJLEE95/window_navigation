@@ -88,7 +88,7 @@ python demo\selftest.py   :: UI 없이 Python 쪽 자동 검증
 - **알 수 있는 것**: 실행 명령, 작업 폴더, 입력 이름(`--input` 등), 시작 시각, CPU 사용, **종료 코드**(모니터가 켜져 있는 동안 끝난 경우).
 - **로그 추정**: 명령 인자의 `.log`/`.txt` → 작업·스크립트 폴더(및 `log`/`logs`/`output` 하위)에서 시작 이후 갱신된 `.log` 중
   **파일 이름에 그 작업의 입력 이름이 들어간 것**. 같은 폴더에 다른 작업이 있어 구분할 수 없으면 추정하지 않습니다.
-  로그에 `INFER_PROGRESS_JSON` 또는 tqdm 진행 표시가 있으면 진행률·속도·예상 완료 시각까지 표시합니다.
+  로그에 `TASK_PROGRESS_JSON`, `INFER_PROGRESS_JSON` 또는 tqdm 진행 표시가 있으면 진행률·속도·예상 완료 시각까지 표시합니다.
 - **작업 폴더의 상태 기록 읽기**: 명령 인자로 준 폴더(`--batch` 등)에 `status.json`(또는 `progress.json`·`state.json`)이 있으면
   그 기록을 우선 사용합니다. 하위 폴더의 `status.json`(상태 + `condition_key`/`stage`/`step` 등)은 **단위 작업**으로,
   `manifest.json`·`plan.json`·`request.json`의 `segments × conditions`(또는 `steps`)는 **전체 계획**으로 읽어
@@ -104,6 +104,9 @@ python demo\selftest.py   :: UI 없이 Python 쪽 자동 검증
 ## Python 연결
 
 `python/taskstate.py` 한 파일만 복사하면 됩니다(또는 `PYTHONPATH`에 `python/` 추가).
+
+영상 외 작업도 같은 화면으로 연결할 수 있습니다. `TASK_PROGRESS_JSON`의 `done/total/unit`으로 파일 수·반복 횟수 등을 전달하고,
+단계 계획을 선언하면 완료·실행 중·대기 목록을 함께 보여 줍니다. [다른 작업 연결 가이드와 실행 예제](docs/GENERIC_TASKS.md)를 참고하세요.
 
 **1) 스크립트에 몇 줄 추가** (`python/examples/example_pipeline.py`)
 
