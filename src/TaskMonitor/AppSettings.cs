@@ -17,6 +17,7 @@ public sealed class AppSettings
     public bool ShowRecentFinished { get; set; } = true;
     public int RecentFinishedMinutes { get; set; } = 10;
     public int MaxChips { get; set; } = 3;
+    public ShortcutBrowser WebBrowser { get; set; } = ShortcutBrowser.Chrome;
     /// <summary>상태 파일을 쓰지 않는 Python 작업도 자동으로 찾기</summary>
     public bool AutoDetect { get; set; } = true;
     public List<string> AutoDetectProcessNames { get; set; } = new() { "python", "pythonw" };

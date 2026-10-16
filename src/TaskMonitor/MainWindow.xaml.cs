@@ -397,6 +397,8 @@ public partial class MainWindow : Window
             ChkFullscreen.IsChecked = s.HideOnFullscreen;
             ChkAuto.IsChecked = s.AutoDetect;
             ChkAutostart.IsChecked = Autostart.IsEnabled;
+            BrowserChrome.IsChecked = s.WebBrowser == ShortcutBrowser.Chrome;
+            BrowserSystem.IsChecked = s.WebBrowser == ShortcutBrowser.SystemDefault;
         }
         finally { _loadingSettings = false; }
     }
@@ -408,6 +410,16 @@ public partial class MainWindow : Window
         {
             if (App.Current.Bar is { } bar) bar.SetPlacement(p);
             else { _c.Settings.Placement = p; _c.Settings.Save(); }
+        }
+    }
+
+    private void Browser_Checked(object sender, RoutedEventArgs e)
+    {
+        if (_loadingSettings || _c is null) return;
+        if (sender is FrameworkElement { Tag: string tag } && Enum.TryParse<ShortcutBrowser>(tag, out var browser))
+        {
+            _c.Settings.WebBrowser = browser;
+            _c.Settings.Save();
         }
     }
 

@@ -205,7 +205,7 @@ public sealed class MonitorController : Observable
 
     public ObservableCollection<TaskItem> Items { get; } = new();
     public ObservableCollection<BarChip> Chips { get; } = new();
-    public ShortcutsController Shortcuts { get; } = new();
+    public ShortcutsController Shortcuts { get; }
     public AppSettings Settings { get; }
     public event Action? Updated;
 
@@ -225,6 +225,7 @@ public sealed class MonitorController : Observable
     public MonitorController(AppSettings settings)
     {
         Settings = settings;
+        Shortcuts = new ShortcutsController(settings);
         _timer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
         _timer.Tick += (_, _) => Tick();
     }

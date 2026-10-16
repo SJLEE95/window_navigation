@@ -62,6 +62,35 @@ internal static class ShortcutSelfTest
         Check(!ShortcutStore.TargetExists(missing) && ShortcutStore.Launch(missing) is string msg && msg.Contains("대상이 없습니다"),
               "없는 대상은 실행하지 않고 메시지 반환");
 
+        Console.WriteLine("[2a] 웹 브라우저 선택 (실행하지 않음)");
+        const string chrome = @"C:\Browser Test\chrome.exe";
+        const string address = "https://example.com/path?q=a%20b&x=1#section";
+        var chromeStart = ShortcutStore.BuildUrlStart(address, ShortcutBrowser.Chrome, chrome);
+        Check(chromeStart.FileName == chrome && chromeStart.ArgumentList.SequenceEqual(new[] { address }),
+              "Chrome 실행 파일과 웹 주소를 별도 인자로 전달");
+        var systemStart = ShortcutStore.BuildUrlStart(address, ShortcutBrowser.SystemDefault, chrome);
+        Check(systemStart.FileName == address && systemStart.ArgumentList.Count == 0, "Windows 기본 브라우저 선택");
+        Check(ShortcutStore.BuildUrlStart(address, ShortcutBrowser.Chrome, null).FileName == address,
+              "Chrome이 없으면 Windows 기본 브라우저로 연결");
+        Check(ShortcutStore.BuildStart(url1!, ShortcutBrowser.SystemDefault).FileName == url1!.Target,
+              ".url 파일에서 읽은 웹 주소에도 선택 적용");
+        var internetShortcut = ShortcutStore.BuildUrlStart(url1.Target, ShortcutBrowser.Chrome, chrome);
+        Check(internetShortcut.FileName == chrome && internetShortcut.ArgumentList.Single() == url1.Target,
+              ".url 웹 주소를 Chrome으로 전달");
+        Check(ShortcutStore.BuildStart(sc!, ShortcutBrowser.Chrome).FileName == lnk &&
+              ShortcutStore.BuildStart(file!, ShortcutBrowser.Chrome).FileName == txt,
+              ".lnk와 일반 파일은 원래 연결 유지");
+        Check(ShortcutStore.BuildUrlStart("mailto:user@example.com", ShortcutBrowser.Chrome, chrome).FileName == "mailto:user@example.com",
+              "웹 외 프로토콜은 원래 연결 유지");
+        Check(new TaskMonitor.AppSettings().WebBrowser == ShortcutBrowser.Chrome, "초기 브라우저는 Chrome");
+        Directory.CreateDirectory(Paths.Root);
+        File.WriteAllText(Paths.Settings, "{}");
+        Check(TaskMonitor.AppSettings.Load().WebBrowser == ShortcutBrowser.Chrome, "기존 설정에 브라우저 항목이 없으면 Chrome");
+        var settings = TaskMonitor.AppSettings.Load();
+        settings.WebBrowser = ShortcutBrowser.SystemDefault;
+        settings.Save();
+        Check(TaskMonitor.AppSettings.Load().WebBrowser == ShortcutBrowser.SystemDefault, "브라우저 선택 저장·다시 읽기");
+
         Console.WriteLine("[3] 저장 · 백업 복구");
         var doc = new ShortcutDoc { Expanded = true };
         for (int k = 0; k < items.Length; k++) { items[k].Order = k * 10; doc.Items.Add(items[k]); }

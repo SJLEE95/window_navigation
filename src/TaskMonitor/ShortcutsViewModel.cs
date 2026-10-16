@@ -70,10 +70,13 @@ public sealed class ShortcutVm : Observable
 /// <summary>바로가기 목록: 불러오기·추가·순서·제거·실행. 바와 작업 창이 같은 인스턴스를 씀.</summary>
 public sealed class ShortcutsController : Observable
 {
+    private readonly AppSettings _settings;
     private ShortcutDoc _doc = new();
     private const int IconPx = 32;
 
     public ObservableCollection<ShortcutVm> Items { get; } = new();
+
+    public ShortcutsController(AppSettings settings) => _settings = settings;
 
     public string CountText => Items.Count == 0 ? "앱" : $"앱 {Items.Count}";
 
@@ -161,7 +164,7 @@ public sealed class ShortcutsController : Observable
     public string? Launch(ShortcutVm vm)
     {
         vm.Exists = ShortcutStore.TargetExists(vm.Item);
-        return ShortcutStore.Launch(vm.Item);
+        return ShortcutStore.Launch(vm.Item, _settings.WebBrowser);
     }
 
     public void Save()

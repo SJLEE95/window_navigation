@@ -377,6 +377,16 @@
                 <CheckBox x:Name="ChkAuto" Content="실행 중인 Python 작업 자동 감지" Style="{StaticResource DarkCheck}" Click="Setting_Click" />
                 <CheckBox x:Name="ChkAutostart" Content="Windows 시작 시 실행" Style="{StaticResource DarkCheck}" Click="Setting_Click" />
 
+                <TextBlock Text="웹 바로가기 브라우저" Style="{StaticResource SectionTitle}" />
+                <WrapPanel>
+                    <RadioButton x:Name="BrowserChrome" Style="{StaticResource SegButton}" GroupName="browser" Tag="Chrome"
+                                 Content="Chrome (기본)" Checked="Browser_Checked" />
+                    <RadioButton x:Name="BrowserSystem" Style="{StaticResource SegButton}" GroupName="browser" Tag="SystemDefault"
+                                 Content="Windows 기본 브라우저" Checked="Browser_Checked" />
+                </WrapPanel>
+                <TextBlock Text="Chrome이 설치되어 있지 않으면 Windows 기본 브라우저로 엽니다."
+                           Foreground="{StaticResource Muted}" FontSize="12" TextWrapping="Wrap" />
+
                 <TextBlock Text="상태 폴더" Style="{StaticResource SectionTitle}" />
                 <TextBlock x:Name="StateDirText" Foreground="{StaticResource Muted}" TextWrapping="Wrap" FontFamily="{StaticResource MonoFont}" FontSize="12" />
                 <WrapPanel Margin="0,10,0,0">

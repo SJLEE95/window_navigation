@@ -1,12 +1,14 @@
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Text.Json;
+using Microsoft.Win32;
 
 namespace TaskMonitor.Core;
 
 // 바로가기 런처 (docs/PLAN_SHORTCUTS_AND_UI.md). WPF 의존 없음.
 
 public enum ShortcutKind { App, Folder, File, Url, Shortcut }
+public enum ShortcutBrowser { Chrome, SystemDefault }
 
 public sealed class ShortcutIcon
 {
@@ -156,8 +158,8 @@ public static class ShortcutStore
         return it.Target;
     }
 
-    /// <summary>탐색기에서 더블클릭한 것과 같은 방식(ShellExecute)으로 실행할 정보</summary>
-    public static ProcessStartInfo BuildStart(ShortcutItem it)
+    /// <summary>종류와 웹 브라우저 선택에 맞는 실행 정보</summary>
+    public static ProcessStartInfo BuildStart(ShortcutItem it, ShortcutBrowser browser = ShortcutBrowser.Chrome)
     {
         switch (it.Kind)
         {
@@ -173,22 +175,64 @@ public static class ShortcutStore
                     WorkingDirectory = !string.IsNullOrEmpty(it.Workdir) && Directory.Exists(it.Workdir)
                         ? it.Workdir! : Path.GetDirectoryName(it.Target) ?? "",
                 };
-            default: // File, Url
+            case ShortcutKind.Url:
+                return BuildUrlStart(it.Target, browser, browser == ShortcutBrowser.Chrome ? FindChrome() : null);
+            default: // File
                 return new ProcessStartInfo(it.Target) { UseShellExecute = true };
         }
+    }
+
+    internal static ProcessStartInfo BuildUrlStart(string target, ShortcutBrowser browser, string? chromePath)
+    {
+        if (browser == ShortcutBrowser.Chrome && !string.IsNullOrEmpty(chromePath) &&
+            Uri.TryCreate(target, UriKind.Absolute, out var uri) && uri.Scheme is "http" or "https")
+        {
+            var start = new ProcessStartInfo(chromePath) { UseShellExecute = true };
+            start.ArgumentList.Add(target);
+            return start;
+        }
+        return new ProcessStartInfo(target) { UseShellExecute = true };
+    }
+
+    private static string? FindChrome()
+    {
+        // 사용자별 설치, 시스템 설치 및 사용자 지정 설치 경로를 읽기만 함.
+        foreach (var hive in new[] { RegistryHive.CurrentUser, RegistryHive.LocalMachine })
+            foreach (var view in new[] { RegistryView.Registry64, RegistryView.Registry32 })
+            {
+                try
+                {
+                    using var root = RegistryKey.OpenBaseKey(hive, view);
+                    using var key = root.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\App Paths\chrome.exe");
+                    if (key?.GetValue("") is string value)
+                    {
+                        string path = Environment.ExpandEnvironmentVariables(value).Trim().Trim('"');
+                        if (File.Exists(path)) return path;
+                    }
+                }
+                catch { /* 등록 정보가 없거나 접근할 수 없으면 일반 설치 경로 확인 */ }
+            }
+        foreach (var folder in new[] { Environment.SpecialFolder.LocalApplicationData, Environment.SpecialFolder.ProgramFiles, Environment.SpecialFolder.ProgramFilesX86 })
+        {
+            string root = Environment.GetFolderPath(folder);
+            if (root.Length == 0) continue;
+            string path = Path.Combine(root, "Google", "Chrome", "Application", "chrome.exe");
+            if (File.Exists(path)) return path;
+        }
+        return null;
     }
 
     [DllImport("user32.dll")] private static extern bool AllowSetForegroundWindow(int pid);
 
     /// <summary>실행. 대상이 없으면 실행하지 않고 오류 메시지를 돌려줌.</summary>
-    public static string? Launch(ShortcutItem it)
+    public static string? Launch(ShortcutItem it, ShortcutBrowser browser = ShortcutBrowser.Chrome)
     {
         if (!TargetExists(it)) return $"대상이 없습니다: {(it.Kind == ShortcutKind.Shortcut ? it.Lnk : it.Target)}";
         try
         {
             // 바 창은 포커스를 뺏지 않는 창이라, 실행된 앱이 앞으로 올 수 있게 허용
             try { AllowSetForegroundWindow(-1); } catch { }
-            Process.Start(BuildStart(it))?.Dispose();
+            Process.Start(BuildStart(it, browser))?.Dispose();
             return null;
         }
         catch (System.ComponentModel.Win32Exception ex) when (ex.NativeErrorCode == 1223)
