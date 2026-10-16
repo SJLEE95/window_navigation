@@ -89,6 +89,12 @@ python demo\selftest.py   :: UI 없이 Python 쪽 자동 검증
 - **로그 추정**: 명령 인자의 `.log`/`.txt` → 작업·스크립트 폴더(및 `log`/`logs`/`output` 하위)에서 시작 이후 갱신된 `.log` 중
   **파일 이름에 그 작업의 입력 이름이 들어간 것**. 같은 폴더에 다른 작업이 있어 구분할 수 없으면 추정하지 않습니다.
   로그에 `INFER_PROGRESS_JSON` 또는 tqdm 진행 표시가 있으면 진행률·속도·예상 완료 시각까지 표시합니다.
+- **작업 폴더의 상태 기록 읽기**: 명령 인자로 준 폴더(`--batch` 등)에 `status.json`(또는 `progress.json`·`state.json`)이 있으면
+  그 기록을 우선 사용합니다. 하위 폴더의 `status.json`(상태 + `condition_key`/`stage`/`step` 등)은 **단위 작업**으로,
+  `manifest.json`·`plan.json`·`request.json`의 `segments × conditions`(또는 `steps`)는 **전체 계획**으로 읽어
+  "완료 8/15 · 진행: sample7_F4725_F5024 · 경계를 완만하게 한 고정식"처럼 끝난 것·진행 중·남은 것을 단계 목록으로 보여 줍니다.
+  상태 기록의 `"log"`가 가리키는 로그에서 현재 단계 처리량을 읽고, 남은 단계는 **같은 조건의 완료 소요 평균**으로 전체 예상 완료(≈)를 계산합니다.
+  확인: 배치 폴더를 `tools\diag_workstatus.bat`에 끌어다 놓으면 읽은 결과가 `.taskmonitor_test\workstatus.log`에 나옵니다.
 - **상태 표시**: "실행 중"(로그 진행 기준), "실행 중 · 로그 갱신 없음", "실행 중 · 활동 없음"(CPU 사용이 오래 없음 — 멈춤/대기/GPU 작업 구분 불가),
   "종료 · 코드 0"(**완료로 표시하지 않음**, 결과는 직접 확인), "오류 종료 · 코드 N", "종료 · 코드 모름"(모니터가 꺼져 있는 동안 끝남).
 - 모니터가 쓰는 것은 `%LOCALAPPDATA%\TaskMonitor\auto\*.json`(자동 감지 기록)과 `auto\_discovery.log`(감지 판단 기록)뿐이며, 프로세스는 건드리지 않습니다.
