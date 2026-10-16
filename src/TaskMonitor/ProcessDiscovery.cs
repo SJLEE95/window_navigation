@@ -56,6 +56,12 @@ internal sealed class ProcessDiscovery : IDisposable
         public DateTime NextLogSearch;
         public DateTime LastSave;
         public bool Dirty = true;
+        /// <summary>작업 폴더의 상태 기록 (status.json 등). 있으면 단계 목록·현재 로그를 거기서 가져옴</summary>
+        public string? StatusFile;
+        public DateTime NextStatusSearch;
+        public DateTime NextStatusRead;
+        public DateTime StatusSig;
+        public bool HasWork;
         /// <summary>venv 런처의 실제 python, multiprocessing 작업자 등 (CPU 합산용)</summary>
         public List<SafeProcessHandle> Children = new();
     }
@@ -289,13 +295,20 @@ internal sealed class ProcessDiscovery : IDisposable
     private bool Update(Tracked t, AppSettings s, DateTimeOffset now)
     {
         var d = t.Doc;
-        var st = d.Stages![0];
         bool exited = WaitForSingleObject(t.Handle, 0) == 0;
+
+        // 작업 폴더가 스스로 남기는 상태 기록(status.json 등)이 있으면 그걸로 단계·현재 로그를 잡음
+        if (DateTime.UtcNow >= t.NextStatusRead)
+        {
+            t.NextStatusRead = DateTime.UtcNow.AddSeconds(4);
+            t.Dirty |= RefreshWorkStatus(t, now);
+        }
 
         // 로그 찾기 / 읽기. 샘플마다 로그를 새로 만드는 스크립트가 많아서 주기적으로 다시 찾고,
         // 더 최근에 갱신된 로그가 생기면 그쪽으로 옮겨 감
-        if (DateTime.UtcNow >= t.NextLogSearch)
+        if (!t.HasWork && DateTime.UtcNow >= t.NextLogSearch)
         {
+            var st = d.Stages![0];
             t.NextLogSearch = DateTime.UtcNow.AddSeconds(15);
             var log = FindLog(t);
             if (log is not null && !string.Equals(log, d.LogPath, StringComparison.OrdinalIgnoreCase))
@@ -311,6 +324,7 @@ internal sealed class ProcessDiscovery : IDisposable
 
         if (exited)
         {
+            var st = CurrentStage(d);
             GetExitCodeProcess(t.Handle, out uint code);
             DateTimeOffset end = now;
             if (GetProcessTimes(t.Handle, out _, out long ex, out _, out _) && ex > 0)
@@ -318,18 +332,24 @@ internal sealed class ProcessDiscovery : IDisposable
             d.State = "exited";
             d.FinishedAt = end;
             d.UpdatedAt = now;
-            st.State = "exited";
-            st.FinishedAt = end;
-            st.EtaSeconds = null;
+            foreach (var s2 in d.Stages!.Where(x => x.State is "running" or "validating"))
+            {
+                s2.State = "exited";
+                s2.FinishedAt = end;
+                s2.EtaSeconds = null;
+            }
+            if (!t.HasWork) { st.State = "exited"; st.FinishedAt = end; st.EtaSeconds = null; }
             d.Activity!.CpuPercent = null;
             d.Activity.IdleSince = null;
             d.Completion = new CompletionDoc { Basis = "exit_code", ExitCode = unchecked((int)code) };
             if (code != 0)
             {
                 string tail = TaskFiles.ReadTail(d.LogPath, 15, out _);
-                d.Error = new ErrorDoc { Type = "ExitCode", Message = $"프로세스가 종료 코드 {unchecked((int)code)}(으)로 끝났습니다", Detail = tail, Stage = "run" };
+                d.Error = new ErrorDoc { Type = "ExitCode", Message = $"프로세스가 종료 코드 {unchecked((int)code)}(으)로 끝났습니다", Detail = tail, Stage = st.Key };
             }
             d.Message = code == 0 ? "프로세스 종료 (코드 0)" : $"프로세스 오류 종료 (코드 {unchecked((int)code)})";
+            if (t.HasWork && d.Stages!.Count > 1)
+                d.Message += $" · 단위 작업 {d.Stages.Count(x => x.State == "succeeded")}/{d.Stages.Count} 완료 기록";
             Save(d);
             t.Handle.Dispose();
             foreach (var ch in t.Children) ch.Dispose();
@@ -392,7 +412,7 @@ internal sealed class ProcessDiscovery : IDisposable
         d.UpdatedAt = writeTime;
 
         string tail = TaskFiles.ReadTail(d.LogPath, 60, out _);
-        var st = d.Stages![0];
+        var st = CurrentStage(d);
         var p = LogProgressParser.ParseTail(tail);
         if (p is not null)
         {
@@ -403,11 +423,89 @@ internal sealed class ProcessDiscovery : IDisposable
             st.Rate = p.Rate;
             st.RateUnit = p.Rate is null ? null : p.Unit + "/s";
             st.EtaSeconds = p.EtaSeconds;
-            if (!string.IsNullOrEmpty(p.Stage)) st.Name = p.Stage;
-            if (!string.IsNullOrEmpty(p.Sample)) d.Subject = p.Sample;
+            if (!t.HasWork && !string.IsNullOrEmpty(p.Stage)) st.Name = p.Stage;
+            if (!t.HasWork && !string.IsNullOrEmpty(p.Sample)) d.Subject = p.Sample;
         }
-        string last = tail.Split('\n', '\r').Select(x => x.Trim()).LastOrDefault(x => x.Length > 0) ?? "";
+        if (t.HasWork) return true; // 메시지는 상태 기록 요약을 유지
+        // 기계용 진행 줄(…_PROGRESS_JSON)은 건너뛰고 사람이 읽을 마지막 줄
+        string last = tail.Split('\n', '\r').Select(x => x.Trim())
+                          .LastOrDefault(x => x.Length > 0 && !x.Contains("_PROGRESS_JSON", StringComparison.Ordinal)) ?? "";
         d.Message = last.Length > 0 ? Fmt.Trim(last, 160) : "로그 비어 있음";
+        return true;
+    }
+
+    private static StageDoc CurrentStage(TaskDoc d) =>
+        d.Stages!.FirstOrDefault(s => s.State is "running" or "validating")
+        ?? d.Stages!.FirstOrDefault(s => s.Key == d.CurrentStage) ?? d.Stages![0];
+
+    /// <summary>명령 인자 중 실제로 있는 폴더 (--batch, --out 등)</summary>
+    private static List<string> ArgDirs(TaskDoc d)
+    {
+        var res = new List<string>();
+        string cwd = d.Workdir ?? "";
+        foreach (var raw in SplitArgs(d.CommandLine ?? "").Skip(1))
+        {
+            string a = raw.Contains('=') && raw.StartsWith('-') ? raw[(raw.IndexOf('=') + 1)..] : raw;
+            if (a.Length < 3 || a.StartsWith('-')) continue;
+            try
+            {
+                string full = Path.IsPathRooted(a) || cwd.Length == 0 ? a : Path.GetFullPath(Path.Combine(cwd, a));
+                if (Directory.Exists(full) && !string.Equals(full.TrimEnd('\\'), cwd.TrimEnd('\\'), StringComparison.OrdinalIgnoreCase))
+                    res.Add(full);
+            }
+            catch { }
+        }
+        return res;
+    }
+
+    /// <summary>
+    /// 작업 폴더의 상태 기록을 읽어 단계 목록(끝난 것 / 진행 중 / 남은 것)과 현재 로그를 반영.
+    /// 진행 중 단계의 처리량(로그에서 읽은 값)은 같은 단계면 유지.
+    /// </summary>
+    private bool RefreshWorkStatus(Tracked t, DateTimeOffset now)
+    {
+        var d = t.Doc;
+        if (t.StatusFile is null)
+        {
+            if (DateTime.UtcNow < t.NextStatusSearch) return false;
+            t.NextStatusSearch = DateTime.UtcNow.AddSeconds(30);
+            t.StatusFile = WorkStatus.FindStatusFile(ArgDirs(d));
+            if (t.StatusFile is null) return false;
+            Trace($"pid={t.Pid} 작업 상태 기록 사용: {t.StatusFile}");
+        }
+        var ws = WorkStatus.Read(t.StatusFile);
+        if (ws is null || ws.Stages.Count == 0) return false;
+        if (t.HasWork && ws.LatestWriteUtc == t.StatusSig && ws.CurrentLog == d.LogPath) return false;
+        t.StatusSig = ws.LatestWriteUtc;
+
+        var old = d.Stages ?? new List<StageDoc>();
+        foreach (var ns in ws.Stages)
+        {
+            var os = old.FirstOrDefault(o => o.Key == ns.Key);
+            if (os is null || ns.State is not ("running" or "validating")) continue;
+            ns.Done = os.Done; ns.Total = os.Total; ns.Unit = os.Unit; ns.Rate = os.Rate;
+            ns.RateUnit = os.RateUnit; ns.EtaSeconds = os.EtaSeconds; ns.ProgressAt = os.ProgressAt;
+        }
+        d.Stages = ws.Stages;
+        var cur = ws.Stages.FirstOrDefault(s => s.State is "running" or "validating")
+                  ?? ws.Stages.FirstOrDefault(s => s.State is "pending");
+        d.CurrentStage = cur?.Key ?? ws.Stages[^1].Key;
+        if (ws.CurrentGroup is { Length: > 0 } g) d.Subject = g;
+        if (ws.CurrentLog is not null && !string.Equals(ws.CurrentLog, d.LogPath, StringComparison.OrdinalIgnoreCase))
+        {
+            d.LogPath = ws.CurrentLog;
+            d.Activity!.LogGuess = ws.CurrentLog;
+            t.LogLen = -1; // 새 로그에서 처리량을 다시 읽음
+        }
+        var write = new DateTimeOffset(ws.LatestWriteUtc).ToLocalTime();
+        if (d.UpdatedAt is not DateTimeOffset u || write > u) d.UpdatedAt = write;
+
+        int total = ws.Stages.Count, done = ws.Done, failed = ws.Failed;
+        var parts = new List<string> { ws.FromPlan ? $"완료 {done}/{total}" : $"완료 {done}" };
+        if (failed > 0) parts.Add($"실패 {failed}");
+        if (cur is not null && cur.State is "running" or "validating") parts.Add("진행: " + (cur.Name ?? cur.Key));
+        d.Message = string.Join(" · ", parts);
+        t.HasWork = true;
         return true;
     }
 

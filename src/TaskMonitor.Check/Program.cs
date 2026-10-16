@@ -49,6 +49,27 @@ for (int i = 0; i < args.Length; i++)
                 if (File.Exists(tr)) Console.WriteLine(File.ReadAllText(tr));
                 return;
             }
+        case "--workstatus":
+            {
+                // 진단: 작업 폴더의 상태 기록을 단계 목록으로 읽은 결과
+                string wd = args[++i];
+                string? sf = WorkStatus.FindStatusFile(new[] { wd });
+                Console.WriteLine($"상태 기록: {sf ?? "(없음)"}");
+                if (sf is null) return;
+                var ws = WorkStatus.Read(sf);
+                if (ws is null) { Console.WriteLine("읽지 못함"); return; }
+                Console.WriteLine($"작업 상태={ws.JobState} 현재={ws.CurrentGroup} · {ws.CurrentTitle} 계획={ws.FromPlan} 완료={ws.Done}/{ws.Stages.Count} 실패={ws.Failed}");
+                Console.WriteLine($"현재 로그={ws.CurrentLog}");
+                Console.WriteLine($"마지막 활동={ws.LatestWriteUtc.ToLocalTime():HH:mm:ss}");
+                foreach (var s in ws.Stages)
+                    Console.WriteLine($"  [{s.State,-9}] {s.Name}  시작={s.StartedAt:HH:mm:ss} 끝={s.FinishedAt:HH:mm:ss} 평소={(s.ExpectedSeconds is double e ? Math.Round(e) + "s" : "-")}");
+                if (ws.CurrentLog is not null)
+                {
+                    var lp = LogProgressParser.ParseTail(TaskFiles.ReadTail(ws.CurrentLog, 60, out _));
+                    Console.WriteLine(lp is null ? "현재 로그 진행 표시 없음" : $"현재 단계 진행: {lp.Done}/{lp.Total} {lp.Unit} rate={lp.Rate:0.###} eta={lp.EtaSeconds:0}s");
+                }
+                return;
+            }
         case "--parse-log":
             {
                 string tail = TaskFiles.ReadTail(args[++i], 60, out _);
