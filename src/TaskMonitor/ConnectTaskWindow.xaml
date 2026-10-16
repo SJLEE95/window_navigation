@@ -1,0 +1,111 @@
+<Window x:Class="TaskMonitor.ConnectTaskWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="작업 연결" Width="760" Height="800" MinWidth="620" MinHeight="600"
+        WindowStartupLocation="CenterOwner" Background="{StaticResource WindowBg}" Foreground="{StaticResource Ink}"
+        FontFamily="{StaticResource UiFont}" FontSize="13" UseLayoutRounding="True">
+    <Window.Resources>
+        <Style TargetType="ComboBoxItem">
+            <Setter Property="Foreground" Value="{StaticResource Ink}" />
+            <Setter Property="Background" Value="{StaticResource RaisedBg}" />
+            <Setter Property="Padding" Value="8,5" />
+        </Style>
+        <Style TargetType="ComboBox">
+            <Setter Property="Foreground" Value="{StaticResource Ink}" />
+            <Setter Property="MinHeight" Value="30" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ComboBox">
+                        <Grid>
+                            <ToggleButton Focusable="False" Background="{StaticResource RaisedBg}" Foreground="{StaticResource Ink}"
+                                          BorderBrush="{StaticResource LineStrong}"
+                                          IsChecked="{Binding IsDropDownOpen, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}">
+                                <ToggleButton.Template>
+                                    <ControlTemplate TargetType="ToggleButton">
+                                        <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                                                BorderThickness="1" CornerRadius="5" />
+                                    </ControlTemplate>
+                                </ToggleButton.Template>
+                            </ToggleButton>
+                            <ContentPresenter Content="{TemplateBinding SelectionBoxItem}" IsHitTestVisible="False" Margin="8,4,24,4" VerticalAlignment="Center" />
+                            <TextBlock Text="▾" IsHitTestVisible="False" HorizontalAlignment="Right" Margin="0,0,8,0" VerticalAlignment="Center" />
+                            <Popup x:Name="PART_Popup" IsOpen="{TemplateBinding IsDropDownOpen}" Placement="Bottom" AllowsTransparency="True" Focusable="False">
+                                <Border Background="{StaticResource RaisedBg}" BorderBrush="{StaticResource LineStrong}" BorderThickness="1"
+                                        MinWidth="{TemplateBinding ActualWidth}">
+                                    <ScrollViewer MaxHeight="220" CanContentScroll="True"><ItemsPresenter /></ScrollViewer>
+                                </Border>
+                            </Popup>
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+    <DockPanel Margin="24">
+        <DockPanel DockPanel.Dock="Bottom" Margin="0,16,0,0" LastChildFill="False">
+            <Button x:Name="SaveButton" DockPanel.Dock="Right" Content="연결 저장" IsDefault="True" Style="{StaticResource PrimaryButton}" Click="Save_Click" />
+            <Button DockPanel.Dock="Right" Content="취소" IsCancel="True" Style="{StaticResource DarkButton}" />
+        </DockPanel>
+        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+            <StackPanel>
+                <TextBlock Text="실행 중인 작업 연결" FontSize="22" FontWeight="SemiBold" />
+                <TextBlock Text="작업을 선택하고 상태 파일이나 로그를 연결하세요." Foreground="{StaticResource Muted}" Margin="0,6,0,16" />
+                <DockPanel Margin="0,0,0,8">
+                    <Button DockPanel.Dock="Right" Content="목록 새로고침" Style="{StaticResource DarkButton}" Margin="8,0,0,0" Click="Refresh_Click" />
+                    <TextBox x:Name="SearchBox" Style="{StaticResource DarkTextBox}" ToolTip="작업 이름·명령·PID로 검색" TextChanged="Search_Changed" />
+                </DockPanel>
+                <ListBox x:Name="ProcessList" Height="138" SelectionChanged="Process_Changed" Background="{StaticResource RaisedBg}"
+                         Foreground="{StaticResource Ink}" BorderBrush="{StaticResource LineStrong}" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                    <ListBox.ItemContainerStyle>
+                        <Style TargetType="ListBoxItem">
+                            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                            <Setter Property="Foreground" Value="{StaticResource Ink}" />
+                        </Style>
+                    </ListBox.ItemContainerStyle>
+                    <ListBox.ItemTemplate>
+                        <DataTemplate>
+                            <StackPanel Margin="5,3" ToolTip="{Binding CommandLine}">
+                                <TextBlock Text="{Binding Label}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                                <TextBlock Text="{Binding CommandLine}" FontSize="11" Foreground="{StaticResource Muted}" TextTrimming="CharacterEllipsis" />
+                            </StackPanel>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+                <TextBlock Text="상태 파일 (JSON · 선택 사항)" Style="{StaticResource SectionTitle}" />
+                <DockPanel>
+                    <Button DockPanel.Dock="Right" Content="찾기…" Style="{StaticResource DarkButton}" Margin="8,0,0,0" Click="BrowseStatus_Click" />
+                    <TextBox x:Name="StatusBox" Style="{StaticResource DarkTextBox}" LostKeyboardFocus="Status_Changed" />
+                </DockPanel>
+                <TextBlock Text="로그 파일 (선택 사항)" Style="{StaticResource SectionTitle}" />
+                <DockPanel>
+                    <Button DockPanel.Dock="Right" Content="찾기…" Style="{StaticResource DarkButton}" Margin="8,0,0,0" Click="BrowseLog_Click" />
+                    <TextBox x:Name="LogBox" Style="{StaticResource DarkTextBox}" LostKeyboardFocus="Log_Changed" />
+                </DockPanel>
+                <Expander Header="진행 정보 연결 항목" Foreground="{StaticResource Muted}" Margin="0,14,0,0">
+                    <StackPanel Margin="0,8,0,0">
+                        <TextBlock Text="파일에서 항목을 자동으로 골랐습니다. 필요한 경우 바꿀 수 있습니다." TextWrapping="Wrap" Margin="0,0,0,8" FontSize="12" />
+                        <Grid>
+                            <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="14" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+                            <StackPanel Margin="0,0,0,8"><TextBlock Text="작업 상태" /><ComboBox x:Name="StateField" SelectionChanged="Field_Changed" /></StackPanel>
+                            <StackPanel Grid.Column="2" Margin="0,0,0,8"><TextBlock Text="현재 단계" /><ComboBox x:Name="StageField" SelectionChanged="Field_Changed" /></StackPanel>
+                            <StackPanel Grid.Row="1" Margin="0,0,0,8"><TextBlock Text="처리한 수량" /><ComboBox x:Name="DoneField" SelectionChanged="Field_Changed" /></StackPanel>
+                            <StackPanel Grid.Row="1" Grid.Column="2" Margin="0,0,0,8"><TextBlock Text="전체 수량" /><ComboBox x:Name="TotalField" SelectionChanged="Field_Changed" /></StackPanel>
+                            <StackPanel Grid.Row="2" Margin="0,0,0,8"><TextBlock Text="입력 이름" /><ComboBox x:Name="SubjectField" SelectionChanged="Field_Changed" /></StackPanel>
+                            <StackPanel Grid.Row="2" Grid.Column="2" Margin="0,0,0,8"><TextBlock Text="단위" /><TextBox x:Name="UnitBox" Text="items" Style="{StaticResource DarkTextBox}" TextChanged="TextField_Changed" /></StackPanel>
+                            <StackPanel Grid.Row="3" Grid.ColumnSpan="3"><TextBlock Text="전체 수량 직접 입력 (모르면 비워 두세요)" /><TextBox x:Name="TotalBox" Style="{StaticResource DarkTextBox}" TextChanged="TextField_Changed" /></StackPanel>
+                        </Grid>
+                    </StackPanel>
+                </Expander>
+                <DockPanel Margin="0,14,0,6">
+                    <Button DockPanel.Dock="Right" Content="미리보기 갱신" Style="{StaticResource DarkButton}" Padding="8,3" Margin="8,0,0,0" Click="Preview_Click" />
+                    <TextBlock Text="미리보기" Style="{StaticResource SectionTitle}" Margin="0" VerticalAlignment="Center" />
+                </DockPanel>
+                <Border Background="{StaticResource RaisedBg}" CornerRadius="8" Padding="12">
+                    <TextBlock x:Name="PreviewText" TextWrapping="Wrap" />
+                </Border>
+                <TextBlock x:Name="ErrorText" Foreground="#FF8FA3" TextWrapping="Wrap" Margin="0,8,0,0" />
+            </StackPanel>
+        </ScrollViewer>
+    </DockPanel>
+</Window>

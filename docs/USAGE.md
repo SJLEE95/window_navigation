@@ -112,6 +112,24 @@ python demo\selftest.py   :: UI 없이 Python 쪽 자동 검증
 
 ## 작업 연결
 
+### UI에서 실행 중인 작업 연결
+
+1. 작업 화면의 **+ 작업 연결**을 누릅니다. 이미 자동 감지된 작업은 상세의 **연결 설정**을 누르면 해당 프로세스가 선택됩니다.
+2. 이름·명령·PID로 프로세스를 찾아 선택합니다. 확인할 수 있는 상태 파일과 로그 경로를 자동으로 채웁니다.
+3. 필요한 경우 **찾기…**로 상태 JSON이나 로그를 바꾸고 **미리보기**를 확인합니다.
+4. **연결 저장**을 누르면 기존 프로세스를 그대로 모니터링합니다. 연결 정보는 모니터 재시작 후에도 유지됩니다.
+
+**진행 정보 연결 항목**을 펼치면 작업 상태·현재 단계·처리한 수량·전체 수량·입력 이름을 JSON 항목과 연결할 수 있습니다.
+중첩 항목은 `current.done`처럼 표시합니다. 전체 수량을 직접 입력할 수도 있으며, 모르면 비워 두면 됩니다.
+현재 입력 번호와 전체 입력 개수는 프레임 처리량과 다른 단위이므로 자동으로 섞지 않습니다.
+
+파일과 로그는 읽기만 하며 작업 실행·재시작이나 원본 파일 변경은 하지 않습니다. 로그만 연결하면 지원하는 진행 형식을 읽고,
+상태 파일의 명시적 완료 기록이 없는 작업은 프로세스 종료만으로 완료라고 표시하지 않습니다.
+JSON에 전체 단계 계획이 없으면 연결 이후의 현재 단계와 수량을 표시하며, 이전 단계·미실행 단계를 임의로 만들지 않습니다.
+상태 파일이 쓰는 도중 잠시 읽히지 않으면 마지막 정상값을 유지하고 연결 오류를 표시한 뒤 다음 갱신에 다시 읽습니다.
+
+### 코드·명령줄에서 연결
+
 `python/taskstate.py` 한 파일만 복사하면 됩니다(또는 `PYTHONPATH`에 `python/` 추가).
 
 `TASK_PROGRESS_JSON`의 `done/total/unit`으로 파일 수·반복 횟수 등을 전달하고,
@@ -195,12 +213,14 @@ python python\taskstate.py register --name "외부 작업" --pid 12345 --log C:\
 python demo\selftest.py
 python -m unittest discover -s demo -p test_progress.py
 dotnet run --project src\TaskMonitor.Check -- --progress-selftest
+dotnet run --project src\TaskMonitor.Check -- --connection-selftest .taskmonitor_test\connections
 tools\test_shortcuts.bat
 ```
 
 - `demo/selftest.py`: 여러 프로세스의 동시 갱신, 작업 상태 전이, 선행 작업·입력 대기, 오류와 종료 기록 검증
 - `demo/test_progress.py`: 공통 진행 로그와 기존 형식, 단계 전환, 래퍼의 완료·실패 처리 검증
 - `--progress-selftest`: 모니터의 JSON·tqdm 진행 로그 해석 검증
+- `--connection-selftest`: JSON 항목 연결, 중복 등록 방지, 연결 복원, 불완전한 파일에서의 복구와 종료 처리 검증 (자체 테스트 프로세스 사용)
 - `tools/test_shortcuts.bat`: 바로가기 종류 판별, 실행 정보, 아이콘 추출, 저장과 백업 복구 검증
 - `tools/verify_auto.bat`: 기존 Python 작업의 자동 감지와 로그 연결 확인
 

@@ -150,6 +150,7 @@ public partial class MainWindow : Window
         if (!ReferenceEquals(Detail.DataContext, item)) Detail.DataContext = item;
         if (item is null) return;
         var v = item.V;
+        BtnConnection.Visibility = v.IsAuto && v.IsActive ? Visibility.Visible : Visibility.Collapsed;
 
         NoResults.Visibility = v.Results.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
         BtnOpenResult.IsEnabled = v.Results.Any(r => !r.IsDir && r.Exists);
@@ -294,6 +295,13 @@ public partial class MainWindow : Window
         try { TaskFiles.Archive(v.Id); }
         catch (Exception ex) { MessageBox.Show("옮기지 못했습니다: " + ex.Message, "TaskMonitor"); }
         _c.Tick();
+    }
+
+    // ---------------------------------------------------------------- 작업 연결
+    private void ConnectTask_Click(object sender, RoutedEventArgs e)
+    {
+        var dialog = new ConnectTaskWindow(_c, Selected?.V.IsAuto == true ? Selected.V.Pid : null) { Owner = this };
+        if (dialog.ShowDialog() == true && dialog.ConnectedId is { } id) Select(id);
     }
 
     // ---------------------------------------------------------------- 바로가기

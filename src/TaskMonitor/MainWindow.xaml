@@ -103,6 +103,8 @@
 
             <DockPanel Margin="22,20,12,0">
                 <DockPanel DockPanel.Dock="Top" Margin="0,0,0,14">
+                    <Button DockPanel.Dock="Right" Content="+ 작업 연결" Style="{StaticResource DarkButton}" Click="ConnectTask_Click"
+                            Padding="10,5" Margin="8,0,0,0" />
                     <TextBlock Text="작업" FontSize="22" FontWeight="SemiBold" />
                     <TextBlock Text="{Binding SummaryText}" Foreground="{StaticResource Muted}" FontSize="12"
                                HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,0,4" />
@@ -171,6 +173,7 @@
                                 <Button x:Name="BtnWorkdir" Content="작업 폴더" Style="{StaticResource DarkButton}" Click="OpenWorkdir_Click" />
                                 <Button x:Name="BtnCancel" Content="중단 요청" Style="{StaticResource DarkButton}" Click="Cancel_Click" />
                                 <Button x:Name="BtnArchive" Content="목록에서 숨기기" Style="{StaticResource DarkButton}" Click="Archive_Click" />
+                                <Button x:Name="BtnConnection" Content="연결 설정" Style="{StaticResource DarkButton}" Click="ConnectTask_Click" />
                             </WrapPanel>
                             
                             <!-- 경고 -->

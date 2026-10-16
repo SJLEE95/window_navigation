@@ -37,6 +37,8 @@ public sealed class TaskDoc
     public string? Source { get; set; }
     public string? CommandLine { get; set; }
     public ActivityDoc? Activity { get; set; }
+    public TaskConnection? Connection { get; set; }
+    public string? ConnectionError { get; set; }
 }
 
 public sealed class ActivityDoc

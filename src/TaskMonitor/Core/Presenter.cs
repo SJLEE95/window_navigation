@@ -38,6 +38,8 @@ public sealed class TaskView
     public string Project { get; init; } = "";
     public string Subject { get; init; } = "";
     public bool IsAuto { get; init; }
+    public int? Pid { get; init; }
+    public TaskConnection? Connection { get; init; }
     public string CommandLine { get; init; } = "";
     public string ActivityText { get; init; } = "";
     public string Workdir { get; init; } = "";
@@ -123,6 +125,7 @@ public static class Presenter
         }
 
         var warnings = new List<string>();
+        if (!string.IsNullOrEmpty(doc.ConnectionError)) warnings.Add(doc.ConnectionError);
         string state = doc.State ?? "";
         bool terminal = state is "succeeded" or "failed" or "cancelled" or "exited";
         bool auto = doc.Source == "auto";
@@ -373,10 +376,12 @@ public static class Presenter
             Project = doc.Project ?? "",
             Subject = doc.Subject ?? "",
             IsAuto = auto,
+            Pid = doc.Pid,
+            Connection = doc.Connection,
             CommandLine = doc.CommandLine ?? "",
             ActivityText = !auto ? "" : string.Join(" · ", new[]
             {
-                "자동 감지(상태 기록 없는 프로세스)",
+                doc.Connection is null ? "자동 감지(상태 기록 없는 프로세스)" : "UI로 연결한 프로세스",
                 !terminal && doc.Activity?.CpuPercent is double cpu ? $"CPU {cpu:0}%" : "",
                 doc.Activity?.LogGuess is { Length: > 0 } lg ? "로그(추정): " + lg : !terminal ? "로그 파일을 찾지 못함 — 진행률은 알 수 없음" : "",
             }.Where(x => x.Length > 0)),

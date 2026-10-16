@@ -134,7 +134,7 @@ public sealed class TaskItem : Observable
     public bool HasMessage => _v.Message.Length > 0;
     public string ProjectLine => string.Join("  ·  ", new[]
     {
-        _v.IsAuto ? "자동 감지" : "",
+        _v.Connection is not null ? "직접 연결" : _v.IsAuto ? "자동 감지" : "",
         _v.Project,
         _v.Subject.Length > 0 ? "입력 " + _v.Subject : "",
     }.Where(s => s.Length > 0));
@@ -235,6 +235,16 @@ public sealed class MonitorController : Observable
         Shortcuts.Load();
         Tick();
         _timer.Start();
+    }
+
+    internal TaskDoc? ConnectionDoc(int pid) => _discovery.FindDoc(pid);
+
+    internal string ConnectProcess(ProcessDiscovery.ConnectableProcess process, TaskConnection connection)
+    {
+        _store.Refresh();
+        string id = _discovery.Connect(process, connection, Settings, _store.Entries);
+        Tick();
+        return id;
     }
 
     public void Tick()

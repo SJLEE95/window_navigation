@@ -5,6 +5,12 @@ using TaskMonitor;
 using TaskMonitor.Core;
 
 Console.OutputEncoding = Encoding.UTF8;
+if (args is ["--connection-worker", var workerRoot])
+{
+    var deadline = DateTime.UtcNow.AddSeconds(25);
+    while (!File.Exists(Path.Combine(workerRoot, "stop-worker")) && DateTime.UtcNow < deadline) Thread.Sleep(50);
+    return;
+}
 string? dir = null;
 double watch = 0;
 int count = int.MaxValue;
@@ -19,6 +25,9 @@ for (int i = 0; i < args.Length; i++)
         case "--detail": detail = true; break;
         case "--progress-selftest":
             Environment.Exit(ProgressSelfTest.Run());
+            return;
+        case "--connection-selftest":
+            Environment.Exit(ConnectionSelfTest.Run(args[++i]));
             return;
         case "--shortcut-selftest":
             Environment.Exit(ShortcutSelfTest.Run(args[++i]));

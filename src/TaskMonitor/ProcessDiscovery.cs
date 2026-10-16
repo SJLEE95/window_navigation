@@ -73,6 +73,91 @@ internal sealed class ProcessDiscovery : IDisposable
 
     public string LastError { get; private set; } = "";
 
+    internal sealed record ConnectableProcess(int Pid, DateTime CreatedUtc, string Name, string CommandLine)
+    {
+        public string Label => $"{Name}  ·  PID {Pid}";
+    }
+
+    internal static List<ConnectableProcess> ConnectionProcesses()
+    {
+        var result = new List<ConnectableProcess>();
+        int session = Process.GetCurrentProcess().SessionId;
+        foreach (var process in Process.GetProcesses())
+        {
+            using (process)
+            {
+                try
+                {
+                    if (process.Id == Environment.ProcessId || process.SessionId != session) continue;
+                    using var handle = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION | SYNCHRONIZE, false, process.Id);
+                    if (handle.IsInvalid || !GetProcessTimes(handle, out long created, out _, out _, out _) || WaitForSingleObject(handle, 0) == 0) continue;
+                    string command = GetCommandLine(handle) ?? "";
+                    if (command.Length == 0) continue;
+                    string name = process.ProcessName;
+                    if (name.StartsWith("python", StringComparison.OrdinalIgnoreCase) && ParsePython(command) is { } python)
+                        name = python.module ? python.script : Path.GetFileNameWithoutExtension(python.script);
+                    result.Add(new(process.Id, DateTime.FromFileTimeUtc(created), name, command));
+                }
+                catch { /* 종료되었거나 조회할 수 없는 프로세스 */ }
+            }
+        }
+        return result.OrderBy(p => p.CommandLine.Contains(".py", StringComparison.OrdinalIgnoreCase) ? 0 : 1)
+                     .ThenBy(p => p.Name, StringComparer.OrdinalIgnoreCase).ToList();
+    }
+
+    internal TaskDoc? FindDoc(int pid) => _tracked.TryGetValue(pid, out var tracked) ? tracked.Doc : null;
+
+    internal string Connect(ConnectableProcess process, TaskConnection connection, AppSettings settings,
+                            IReadOnlyDictionary<string, StoreEntry> entries)
+    {
+        using var validation = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION | SYNCHRONIZE, false, process.Pid);
+        if (validation.IsInvalid || !GetProcessTimes(validation, out long created, out _, out _, out _) ||
+            DateTime.FromFileTimeUtc(created) != process.CreatedUtc || WaitForSingleObject(validation, 0) == 0)
+            throw new InvalidOperationException("선택한 프로세스가 종료되었습니다. 목록을 새로 고쳐 다시 선택하세요.");
+        if (entries.Values.Any(e => e.Doc is { } d && d.Source != "auto" && d.State is not ("succeeded" or "failed" or "cancelled") &&
+                                   (d.Pid == process.Pid || d.ChildPid == process.Pid)))
+            throw new InvalidOperationException("이 프로세스는 이미 상태 파일로 등록되어 있습니다.");
+        if (!string.IsNullOrEmpty(connection.StatusFile)) ConnectionReader.Read(connection);
+        if (_tracked.TryGetValue(process.Pid, out var old) &&
+            (!GetProcessTimes(old.Handle, out long oldCreated, out _, out _, out _) || oldCreated != created))
+        {
+            old.Handle.Dispose();
+            foreach (var child in old.Children) child.Dispose();
+            _tracked.Remove(process.Pid);
+        }
+        if (!_tracked.TryGetValue(process.Pid, out var tracked))
+        {
+            var handle = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION | SYNCHRONIZE, false, process.Pid);
+            if (handle.IsInvalid) { handle.Dispose(); throw new IOException("프로세스에 연결할 수 없습니다."); }
+            var candidate = new Cand(process.Pid, process.CreatedUtc, handle, process.CommandLine, 0, "");
+            var parsed = process.CommandLine.Contains("python", StringComparison.OrdinalIgnoreCase) ? ParsePython(process.CommandLine) : null;
+            var doc = NewDoc(candidate, parsed ?? (process.Name, new List<string>(), false), GetCurrentDirectory(process.Pid), settings);
+            tracked = new Tracked { Pid = process.Pid, Handle = handle, Doc = doc };
+            _tracked[process.Pid] = tracked;
+        }
+        tracked.Doc.Connection = connection;
+        tracked.Doc.State = "running";
+        tracked.Doc.FinishedAt = null;
+        tracked.Doc.Completion = null;
+        tracked.Doc.Error = null;
+        tracked.Doc.ConnectionError = null;
+        tracked.Doc.LogPath = connection.LogFile;
+        tracked.Doc.Activity!.LogGuess = connection.LogFile;
+        tracked.StatusFile = null;
+        tracked.NextStatusRead = DateTime.MinValue;
+        tracked.LogLen = -1;
+        tracked.HasWork = false;
+        if (string.IsNullOrEmpty(connection.StatusFile))
+        {
+            tracked.Doc.CurrentStage = "run";
+            tracked.Doc.Stages = new() { new StageDoc { Key = "run", Name = "실행", State = "running", StartedAt = DateTimeOffset.Now } };
+        }
+        tracked.Dirty = true;
+        Update(tracked, settings, DateTimeOffset.Now);
+        Save(tracked.Doc);
+        return tracked.Doc.Id;
+    }
+
     /// <returns>auto 기록을 쓰거나 바꿨으면 true</returns>
     public bool Scan(IReadOnlyDictionary<string, StoreEntry> entries, AppSettings s, DateTimeOffset now)
     {
@@ -291,6 +376,8 @@ internal sealed class ProcessDiscovery : IDisposable
         return list;
     }
 
+    internal static List<string> ConnectionArguments(string command) => SplitArgs(command);
+
     // ------------------------------------------------------------ 갱신
     private bool Update(Tracked t, AppSettings s, DateTimeOffset now)
     {
@@ -298,7 +385,25 @@ internal sealed class ProcessDiscovery : IDisposable
         bool exited = WaitForSingleObject(t.Handle, 0) == 0;
 
         // 작업 폴더가 스스로 남기는 상태 기록(status.json 등)이 있으면 그걸로 단계·현재 로그를 잡음
-        if (DateTime.UtcNow >= t.NextStatusRead)
+        if (d.Connection is { } connection)
+        {
+            if (exited || DateTime.UtcNow >= t.NextStatusRead)
+            {
+                t.NextStatusRead = DateTime.UtcNow.AddSeconds(2);
+                try
+                {
+                    if (!string.IsNullOrEmpty(connection.StatusFile))
+                    {
+                        ConnectionReader.Apply(d, connection, ConnectionReader.Read(connection));
+                        t.HasWork = true;
+                    }
+                    d.ConnectionError = null;
+                }
+                catch (Exception ex) { d.ConnectionError = "연결한 상태 파일을 읽지 못했습니다: " + ex.Message; }
+                t.Dirty = true;
+            }
+        }
+        else if (DateTime.UtcNow >= t.NextStatusRead)
         {
             t.NextStatusRead = DateTime.UtcNow.AddSeconds(4);
             t.Dirty |= RefreshWorkStatus(t, now);
@@ -306,7 +411,7 @@ internal sealed class ProcessDiscovery : IDisposable
 
         // 로그 찾기 / 읽기. 샘플마다 로그를 새로 만드는 스크립트가 많아서 주기적으로 다시 찾고,
         // 더 최근에 갱신된 로그가 생기면 그쪽으로 옮겨 감
-        if (!t.HasWork && DateTime.UtcNow >= t.NextLogSearch)
+        if (d.Connection is null && !t.HasWork && DateTime.UtcNow >= t.NextLogSearch)
         {
             var st = d.Stages![0];
             t.NextLogSearch = DateTime.UtcNow.AddSeconds(15);
@@ -320,7 +425,7 @@ internal sealed class ProcessDiscovery : IDisposable
                 t.Dirty = true;
             }
         }
-        if (d.LogPath is not null) t.Dirty |= ReadLog(t, now);
+        if (d.LogPath is not null) t.Dirty |= ReadLog(t, now, string.IsNullOrEmpty(d.Connection?.DoneField));
 
         if (exited)
         {
@@ -329,7 +434,8 @@ internal sealed class ProcessDiscovery : IDisposable
             DateTimeOffset end = now;
             if (GetProcessTimes(t.Handle, out _, out long ex, out _, out _) && ex > 0)
                 end = new DateTimeOffset(DateTime.FromFileTimeUtc(ex)).ToLocalTime();
-            d.State = "exited";
+            bool recordedEnd = d.Connection is not null && (d.State is "succeeded" or "failed" or "cancelled") && code == 0;
+            if (!recordedEnd) d.State = "exited";
             d.FinishedAt = end;
             d.UpdatedAt = now;
             foreach (var s2 in d.Stages!.Where(x => x.State is "running" or "validating"))
@@ -341,13 +447,13 @@ internal sealed class ProcessDiscovery : IDisposable
             if (!t.HasWork) { st.State = "exited"; st.FinishedAt = end; st.EtaSeconds = null; }
             d.Activity!.CpuPercent = null;
             d.Activity.IdleSince = null;
-            d.Completion = new CompletionDoc { Basis = "exit_code", ExitCode = unchecked((int)code) };
+            if (!recordedEnd) d.Completion = new CompletionDoc { Basis = "exit_code", ExitCode = unchecked((int)code) };
             if (code != 0)
             {
                 string tail = TaskFiles.ReadTail(d.LogPath, 15, out _);
                 d.Error = new ErrorDoc { Type = "ExitCode", Message = $"프로세스가 종료 코드 {unchecked((int)code)}(으)로 끝났습니다", Detail = tail, Stage = st.Key };
             }
-            d.Message = code == 0 ? "프로세스 종료 (코드 0)" : $"프로세스 오류 종료 (코드 {unchecked((int)code)})";
+            if (!recordedEnd) d.Message = code == 0 ? "프로세스 종료 (코드 0)" : $"프로세스 오류 종료 (코드 {unchecked((int)code)})";
             if (t.HasWork && d.Stages!.Count > 1)
                 d.Message += $" · 단위 작업 {d.Stages.Count(x => x.State == "succeeded")}/{d.Stages.Count} 완료 기록";
             Save(d);
@@ -382,7 +488,7 @@ internal sealed class ProcessDiscovery : IDisposable
             else { t.LastCpu = cpu; t.LastCpuAt = at; }
         }
 
-        if (d.LogPath is null)
+        if (d.LogPath is null && d.Connection?.StatusFile is null)
         {
             d.Message = "로그 파일을 찾지 못함 — 진행률은 알 수 없음";
             // 로그가 없으면 '살아 있음'만 알 수 있으므로 갱신 시각은 감지 시각
@@ -399,7 +505,7 @@ internal sealed class ProcessDiscovery : IDisposable
         return false;
     }
 
-    private bool ReadLog(Tracked t, DateTimeOffset now)
+    private bool ReadLog(Tracked t, DateTimeOffset now, bool readProgress = true)
     {
         var d = t.Doc;
         FileInfo fi;
@@ -409,12 +515,12 @@ internal sealed class ProcessDiscovery : IDisposable
         t.LogLen = fi.Length;
         t.LogWrite = fi.LastWriteTimeUtc;
         var writeTime = new DateTimeOffset(fi.LastWriteTimeUtc).ToLocalTime();
-        d.UpdatedAt = writeTime;
+        if (d.Connection is null || d.UpdatedAt is null || writeTime > d.UpdatedAt) d.UpdatedAt = writeTime;
 
         string tail = TaskFiles.ReadTail(d.LogPath, 60, out _);
         var st = CurrentStage(d);
         var p = LogProgressParser.ParseTail(tail);
-        if (p is not null)
+        if (p is not null && readProgress)
         {
             if (st.Done != p.Done) st.ProgressAt = writeTime;
             st.Done = p.Done;
@@ -627,7 +733,8 @@ internal sealed class ProcessDiscovery : IDisposable
         foreach (var e in entries.Values)
         {
             var d = e.Doc;
-            if (d is null || d.Source != "auto" || d.State != "running" || d.Pid is not int pid) continue;
+            if (d is null || d.Source != "auto" || d.State is not ("running" or "waiting" or "validating" or "pending") || d.Pid is not int pid) continue;
+            if (_tracked.ContainsKey(pid)) continue;
             var h = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION | SYNCHRONIZE, false, pid);
             bool same = false;
             if (!h.IsInvalid && GetProcessTimes(h, out long cr, out _, out _, out _) && d.StartedAt is DateTimeOffset sa)
