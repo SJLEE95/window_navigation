@@ -146,9 +146,7 @@ public partial class MainWindow : Window
         bool has = item is not null;
         Detail.Visibility = has ? Visibility.Visible : Visibility.Collapsed;
         EmptyHint.Visibility = has ? Visibility.Collapsed : Visibility.Visible;
-        EmptyHint.Text = _c.Items.Count == 0
-            ? "아직 보이는 작업이 없습니다.\n\n상태 파일을 쓰는 작업(taskstate.py)이나, 실행 중인 Python 작업(자동 감지)이 생기면 여기에 나타납니다."
-            : "왼쪽에서 작업을 고르세요.";
+        EmptyHint.Text = _c.Items.Count == 0 ? "작업 없음" : "작업을 고르세요";
         if (!ReferenceEquals(Detail.DataContext, item)) Detail.DataContext = item;
         if (item is null) return;
         var v = item.V;
@@ -172,7 +170,7 @@ public partial class MainWindow : Window
         catch { }
         if (key == _logKey) return;
         _logKey = key;
-        LogPathRun.Text = "   " + (string.IsNullOrEmpty(v.LogPath) ? "(로그 경로 기록 없음)" : v.LogPath);
+        LogTitleRun.ToolTip = string.IsNullOrEmpty(v.LogPath) ? "로그 경로 기록 없음" : v.LogPath;
         string tail = TaskFiles.ReadTail(v.LogPath, 80, out bool exists);
         if (!string.IsNullOrEmpty(v.LogPath) && !exists) tail = "(로그 파일이 아직 없습니다)";
         bool atEnd = LogBox.VerticalOffset + LogBox.ViewportHeight >= LogBox.ExtentHeight - 4;
@@ -267,7 +265,7 @@ public partial class MainWindow : Window
 
     private void ExitMonitor_Click(object sender, RoutedEventArgs e)
     {
-        var ok = MessageBox.Show(this, "모니터를 종료할까요?\n\n실행 중인 작업은 멈추지 않고 계속 돕니다. 다시 실행하면 현재 상태를 그대로 보여 줍니다.",
+        var ok = MessageBox.Show(this, "모니터를 종료할까요? (실행 중인 작업은 계속 돕니다)",
             "모니터 종료", MessageBoxButton.YesNo, MessageBoxImage.Question);
         if (ok == MessageBoxResult.Yes) App.Current.ExitApp();
     }

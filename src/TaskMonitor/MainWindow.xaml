@@ -15,6 +15,7 @@
         <Style x:Key="CardItem" TargetType="ListBoxItem">
             <Setter Property="Margin" Value="0,0,0,8" />
             <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Foreground" Value="{StaticResource Ink}" />
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="ListBoxItem">
@@ -113,7 +114,7 @@
                          ScrollViewer.HorizontalScrollBarVisibility="Disabled" Padding="0,0,6,12">
                     <ListBox.ItemTemplate>
                         <DataTemplate>
-                            <Grid Opacity="{Binding CardOpacity}">
+                            <Grid Opacity="{Binding CardOpacity}" ToolTip="{Binding Hint}">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="56" />
                                     <ColumnDefinition Width="*" />
@@ -147,13 +148,16 @@
                                   PreviewMouseWheel="Detail_PreviewMouseWheel">
                         <StackPanel>
                             <StackPanel Orientation="Horizontal">
-                                <Border Background="{Binding Brush}" CornerRadius="10" Padding="10,2" VerticalAlignment="Center">
-                                    <TextBlock Text="{Binding V.StatusLabel}" Foreground="#0C0D10" FontSize="12" FontWeight="SemiBold" />
-                                </Border>
+                                <Grid VerticalAlignment="Center">
+                                    <Border Background="{Binding Brush}" CornerRadius="10" Opacity="0.18" />
+                                    <Border BorderBrush="{Binding Brush}" BorderThickness="1" CornerRadius="10" Padding="10,2">
+                                        <TextBlock Text="{Binding V.StatusLabel}" Foreground="{Binding Brush}" FontSize="12" FontWeight="SemiBold" />
+                                    </Border>
+                                </Grid>
                                 <TextBlock Text="{Binding ProjectLine}" Foreground="{StaticResource Muted}" FontSize="12" Margin="10,0,0,0"
                                            VerticalAlignment="Center" />
                             </StackPanel>
-                            <TextBlock Text="{Binding V.Name}" FontSize="22" FontWeight="SemiBold" TextWrapping="Wrap" Margin="0,10,0,0" />
+                            <TextBlock Text="{Binding DisplayName}" ToolTip="{Binding Hint}" FontSize="22" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" Margin="0,10,0,0" />
                             <TextBlock Text="{Binding V.Message}" Foreground="{StaticResource Muted}" TextWrapping="Wrap" Margin="0,6,0,0"
                                        Visibility="{Binding HasMessage, Converter={StaticResource BoolToVis}}" />
                             <TextBlock Margin="0,8,0,0" Foreground="{StaticResource Muted}" FontSize="12" TextWrapping="Wrap">
@@ -168,19 +172,7 @@
                                 <Button x:Name="BtnCancel" Content="중단 요청" Style="{StaticResource DarkButton}" Click="Cancel_Click" />
                                 <Button x:Name="BtnArchive" Content="목록에서 숨기기" Style="{StaticResource DarkButton}" Click="Archive_Click" />
                             </WrapPanel>
-                            <TextBlock Text="{Binding V.CancelText}" Foreground="#6C7280" FontSize="12" />
-
-                            <!-- 자동 감지 정보 -->
-                            <Border Background="#1A2233" CornerRadius="10" Padding="12,10" Margin="0,12,0,0"
-                                    Visibility="{Binding V.IsAuto, Converter={StaticResource BoolToVis}}">
-                                <StackPanel>
-                                    <TextBlock Text="{Binding V.ActivityText}" Foreground="#AFC8FF" FontSize="12" TextWrapping="Wrap" />
-                                    <TextBox Text="{Binding V.CommandLine, Mode=OneWay}" IsReadOnly="True" BorderThickness="0" Background="Transparent"
-                                             Foreground="{StaticResource Muted}" FontFamily="{StaticResource MonoFont}" FontSize="11"
-                                             TextWrapping="Wrap" Margin="0,6,0,0" />
-                                </StackPanel>
-                            </Border>
-
+                            
                             <!-- 경고 -->
                             <Border Background="{x:Static local:Theme.WarningBg}" CornerRadius="10" Padding="12,10" Margin="0,12,0,0"
                                     Visibility="{Binding HasWarnings, Converter={StaticResource BoolToVis}}">
@@ -210,8 +202,7 @@
                                     </StackPanel>
                                 </Border>
                             </UniformGrid>
-                            <TextBlock Text="≈ 는 지금까지의 처리 속도로 계산한 예상값입니다." Foreground="#6C7280" FontSize="11" Margin="0,6,0,0" />
-
+                            
                             <StackPanel Visibility="{Binding HasWaiting, Converter={StaticResource BoolToVis}}">
                                 <TextBlock Text="대기 · 선행 작업" Style="{StaticResource SectionTitle}" />
                                 <TextBlock Text="{Binding V.WaitingText}" TextWrapping="Wrap" />
@@ -253,7 +244,7 @@
                             </StackPanel>
 
                             <TextBlock Text="결과" Style="{StaticResource SectionTitle}" />
-                            <TextBlock x:Name="NoResults" Text="기록된 결과 경로 없음" Foreground="#6C7280" />
+                            <TextBlock x:Name="NoResults" Text="없음" Foreground="{StaticResource Muted}" />
                             <ItemsControl ItemsSource="{Binding V.Results}">
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate>
@@ -265,7 +256,6 @@
                                             <TextBlock VerticalAlignment="Center" TextTrimming="CharacterEllipsis" ToolTip="{Binding Path}">
                                                 <Run Text="{Binding Label, Mode=OneWay}" FontWeight="SemiBold" />
                                                 <Run Text="{Binding Note, Mode=OneWay}" Foreground="#FF8FA3" />
-                                                <Run Text="{Binding Path, Mode=OneWay}" Foreground="{StaticResource Muted}" />
                                             </TextBlock>
                                         </DockPanel>
                                     </DataTemplate>
@@ -274,7 +264,7 @@
                             <TextBlock Text="{Binding V.CompletionText}" Foreground="{StaticResource Muted}" FontSize="12" Margin="0,4,0,0" TextWrapping="Wrap" />
 
                             <TextBlock Style="{StaticResource SectionTitle}">
-                                <Run Text="최근 로그" /><Run x:Name="LogPathRun" Text="" Foreground="#6C7280" FontWeight="Normal" />
+                                <Run x:Name="LogTitleRun" Text="최근 로그" />
                             </TextBlock>
                             <TextBlock x:Name="LogErrors" Foreground="#FF8FA3" TextWrapping="Wrap" FontFamily="{StaticResource MonoFont}"
                                        FontSize="12" Margin="0,0,0,6" Visibility="Collapsed" />
@@ -289,24 +279,22 @@
 
         <!-- ============================== 바로가기 ============================== -->
         <DockPanel x:Name="PageShortcuts" Grid.Column="1" Margin="26,20,26,20" Visibility="Collapsed">
-            <DockPanel DockPanel.Dock="Top" Margin="0,0,0,6">
+            <DockPanel DockPanel.Dock="Top" Margin="0,0,0,14">
                 <TextBlock Text="바로가기" FontSize="22" FontWeight="SemiBold" />
             </DockPanel>
-            <TextBlock DockPanel.Dock="Top" Foreground="{StaticResource Muted}" TextWrapping="Wrap" Margin="0,0,0,14"
-                       Text="캡슐의 ‘앱’ 버튼에서 펼쳐지는 바로가기입니다. 파일·폴더·.lnk 를 캡슐이나 이 창에 끌어다 놓아도 추가됩니다. 이름과 인자는 고친 뒤 다른 곳을 누르면 저장됩니다." />
             <WrapPanel DockPanel.Dock="Top" Margin="0,0,0,12">
                 <Button Content="파일·앱 추가…" Style="{StaticResource PrimaryButton}" Click="AddFile_Click" />
                 <Button Content="폴더 추가…" Style="{StaticResource DarkButton}" Click="AddFolder_Click" />
                 <TextBox x:Name="UrlBox" Style="{StaticResource DarkTextBox}" Width="320" Margin="12,0,6,6" VerticalContentAlignment="Center"
                          ToolTip="https:// 로 시작하는 웹 주소" />
                 <Button Content="웹 주소 추가" Style="{StaticResource DarkButton}" Click="AddUrl_Click" />
-                <CheckBox Content="패널을 열어 둔 채로 (실행해도 닫지 않음)" IsChecked="{Binding Shortcuts.Pinned}" Style="{StaticResource DarkCheck}"
+                <CheckBox Content="패널 고정" IsChecked="{Binding Shortcuts.Pinned}" Style="{StaticResource DarkCheck}"
                           VerticalAlignment="Center" Margin="16,0,0,6" />
             </WrapPanel>
             <Border Background="{StaticResource CardBg}" BorderBrush="{StaticResource Line}" BorderThickness="1" CornerRadius="12"
                     AllowDrop="True" DragEnter="Shortcuts_DragEnter" DragOver="Shortcuts_DragEnter" Drop="Shortcuts_Drop">
                 <Grid>
-                    <TextBlock x:Name="ShortcutsEmpty" Text="아직 바로가기가 없습니다. 파일·폴더를 여기로 끌어다 놓아 보세요."
+                    <TextBlock x:Name="ShortcutsEmpty" Text="바로가기 없음"
                                Foreground="{StaticResource Muted}" Margin="20" />
                     <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="8">
                         <ItemsControl ItemsSource="{Binding Shortcuts.Items}">
@@ -336,7 +324,7 @@
                                                 <TextBlock Text="{Binding PathText}" Foreground="{StaticResource Muted}" FontSize="12"
                                                            TextTrimming="CharacterEllipsis" ToolTip="{Binding PathText}" />
                                                 <DockPanel Margin="0,4,0,0" Visibility="{Binding CanEditArgs, Converter={StaticResource BoolToVis}}">
-                                                    <TextBlock Text="인자" Foreground="#6C7280" FontSize="11" VerticalAlignment="Center" Margin="0,0,6,0" />
+                                                    <TextBlock Text="인자" Foreground="{StaticResource Muted}" FontSize="11" VerticalAlignment="Center" Margin="0,0,6,0" />
                                                     <TextBox Text="{Binding Args, UpdateSourceTrigger=LostFocus}" Style="{StaticResource DarkTextBox}" FontSize="12" />
                                                 </DockPanel>
                                             </StackPanel>
@@ -376,12 +364,11 @@
                     <RadioButton Style="{StaticResource SegButton}" GroupName="pos" Tag="BottomCenter" Content="아래 가운데" Checked="Placement_Checked" />
                     <RadioButton Style="{StaticResource SegButton}" GroupName="pos" Tag="BottomRight" Content="오른쪽 아래" Checked="Placement_Checked" />
                 </UniformGrid>
-                <TextBlock Text="캡슐의 빈 곳을 끌어 놓아도 가장 가까운 자리로 붙습니다." Foreground="#6C7280" FontSize="12" Margin="0,6,0,0" />
-
+                
                 <TextBlock Text="동작" Style="{StaticResource SectionTitle}" />
                 <CheckBox x:Name="ChkTopmost" Content="캡슐을 항상 위에 표시" Style="{StaticResource DarkCheck}" Click="Setting_Click" />
                 <CheckBox x:Name="ChkFullscreen" Content="다른 프로그램이 전체 화면이면 캡슐 숨기기" Style="{StaticResource DarkCheck}" Click="Setting_Click" />
-                <CheckBox x:Name="ChkAuto" Content="실행 중인 Python 작업 자동 감지 (상태 기록 없는 작업도 표시)" Style="{StaticResource DarkCheck}" Click="Setting_Click" />
+                <CheckBox x:Name="ChkAuto" Content="실행 중인 Python 작업 자동 감지" Style="{StaticResource DarkCheck}" Click="Setting_Click" />
                 <CheckBox x:Name="ChkAutostart" Content="Windows 시작 시 실행" Style="{StaticResource DarkCheck}" Click="Setting_Click" />
 
                 <TextBlock Text="상태 폴더" Style="{StaticResource SectionTitle}" />

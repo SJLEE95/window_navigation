@@ -19,7 +19,7 @@
         <SolidColorBrush x:Key="Line" Color="#2A2E37" />
         <SolidColorBrush x:Key="LineStrong" Color="#343944" />
         <SolidColorBrush x:Key="Ink" Color="#E6E8EE" />
-        <SolidColorBrush x:Key="Muted" Color="#9AA0AC" />
+        <SolidColorBrush x:Key="Muted" Color="#B4BAC6" />
         <SolidColorBrush x:Key="Accent" Color="#8AB4FF" />
         <SolidColorBrush x:Key="AccentInk" Color="#0C0D10" />
         <SolidColorBrush x:Key="HoverBg" Color="#2A2E37" />

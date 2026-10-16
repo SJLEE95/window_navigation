@@ -99,7 +99,11 @@ public sealed class TaskItem : Observable
         _ => "…",
     };
 
-    public string CardTitle => _v.IsAuto && _v.Subject.Length > 0 ? $"{_v.Name.Split(' ')[0]} · {_v.Subject}" : _v.Name;
+    /// <summary>화면에 보이는 이름: 자동 감지 작업은 프로그램 이름만 (+ 입력 이름)</summary>
+    public string DisplayName => Names.Display(_v);
+    public string CardTitle => DisplayName;
+    /// <summary>마우스를 올리면 뜨는 전체 이름·명령·경로</summary>
+    public string Hint => Names.Hint(_v);
 
     /// <summary>카드 둘째 줄: 상태 + 현재 단계·처리량</summary>
     public string CardLine2
@@ -134,6 +138,42 @@ public sealed class TaskItem : Observable
         _v.Project,
         _v.Subject.Length > 0 ? "입력 " + _v.Subject : "",
     }.Where(s => s.Length > 0));
+}
+
+/// <summary>작업 이름 표시: 화면에는 짧게, 경로·명령은 힌트(툴팁)로</summary>
+public static class Names
+{
+    /// <summary>프로그램 이름. "-m pkg.run_x --a b" → run_x, "C:\a\job.py x" → job. 상태 기록 작업은 기록된 이름 그대로.</summary>
+    public static string Program(TaskView v)
+    {
+        if (!v.IsAuto) return v.Name;
+        string n = v.Name.Trim();
+        string prog;
+        if (n.StartsWith("-m ", StringComparison.Ordinal))
+            prog = n[3..].Split(' ', 2)[0].Split('.')[^1];
+        else
+        {
+            int i = n.IndexOf(".py", StringComparison.OrdinalIgnoreCase);
+            prog = System.IO.Path.GetFileName((i > 0 ? n[..i] : n.Split(' ')[0]).Trim('"'));
+        }
+        return prog.Length > 0 ? prog : n;
+    }
+
+    public static string Display(TaskView v) =>
+        v.IsAuto && v.Subject.Length > 0 ? $"{Program(v)} · {v.Subject}" : Program(v);
+
+    public static string Hint(TaskView v)
+    {
+        var lines = new List<string> { v.Name };
+        if (v.IsAuto)
+        {
+            if (v.CommandLine.Length > 0) lines.Add(Fmt.Trim(v.CommandLine, 400));
+            if (v.ActivityText.Length > 0) lines.Add(v.ActivityText);
+        }
+        if (v.Workdir.Length > 0) lines.Add("작업 폴더: " + v.Workdir);
+        if (!string.IsNullOrEmpty(v.LogPath)) lines.Add("로그: " + v.LogPath);
+        return string.Join("\n", lines);
+    }
 }
 
 /// <summary>캡슐 바의 작업 표시 한 개 (진행 링 또는 경고·실패 알약)</summary>
@@ -251,12 +291,12 @@ public sealed class MonitorController : Observable
         }
     }
 
-    private static string ChipTitle(TaskView v) =>
-        v.IsAuto ? Fmt.Trim(System.IO.Path.GetFileNameWithoutExtension(v.Name.Split(' ')[0]), 16) : Fmt.Trim(v.Name, 18);
+    private static string ChipTitle(TaskView v) => Fmt.Trim(Names.Program(v), v.IsAuto ? 18 : 20);
 
     private static string TooltipOf(TaskView v) =>
-        $"{v.Name}\n{v.StatusLabel}\n{v.StageText}\n진행률: {v.ProgressText}\n예상 완료: {v.EtaShort}\n{v.UpdatedText}"
-        + (v.Warnings.Count > 0 ? "\n" + string.Join("\n", v.Warnings) : "") + "\n\n클릭: 상세 보기";
+        $"{Names.Display(v)}\n{v.StatusLabel}\n{v.StageText}\n진행률: {v.ProgressText}\n예상 완료: {v.EtaShort}\n{v.UpdatedText}"
+        + (v.Warnings.Count > 0 ? "\n" + string.Join("\n", v.Warnings) : "")
+        + (v.IsAuto && v.CommandLine.Length > 0 ? "\n\n" + Fmt.Trim(v.CommandLine, 300) : "");
 
     private void BuildBar(List<TaskView> views, DateTimeOffset now)
     {

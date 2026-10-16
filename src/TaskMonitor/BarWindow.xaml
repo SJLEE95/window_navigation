@@ -6,7 +6,7 @@
         WindowStyle="None" AllowsTransparency="True" Background="Transparent"
         ResizeMode="NoResize" ShowInTaskbar="False" ShowActivated="False"
         SizeToContent="WidthAndHeight" Topmost="True"
-        FontFamily="{StaticResource UiFont}" FontSize="12"
+        FontFamily="{StaticResource UiFont}" FontSize="12" Foreground="{StaticResource Ink}"
         UseLayoutRounding="True" TextOptions.TextFormattingMode="Display">
     <!-- 그림자 여백 -->
     <Grid Margin="8,6,8,12">
@@ -110,7 +110,6 @@
                             <TextBlock Text="&#xE718;" FontFamily="{StaticResource IconFont}" FontSize="13" />
                         </ToggleButton>
                         <TextBlock Text="바로가기" Foreground="{StaticResource Muted}" />
-                        <TextBlock Text="  ·  끌어다 놓아 추가" Foreground="#6C7280" />
                     </DockPanel>
                     <ItemsControl ItemsSource="{Binding Shortcuts.Items}">
                         <ItemsControl.ItemsPanel>
