@@ -1,20 +1,22 @@
-# TaskMonitor (Window_Navigation)
+# TaskMonitor
 
-여러 프로젝트의 장시간 Python 작업(영상 생성·인코딩·분석·측정)을 **한 번 띄워 두면 화면 위 가운데의 작은 다크 캡슐**로 보여 주고,
-자주 쓰는 앱·폴더 **바로가기 런처**도 겸하는 Windows 프로그램입니다. "돌고 있나? / 얼마나 남았나? / 끝났나?"를 캡슐의 진행 링으로 보고,
-누르면 작업 창이 열립니다.
+Windows에서 오래 실행되는 작업의 진행 상황을 확인하고, 자주 쓰는 앱과 폴더를 여는 작업 모니터 겸 바로가기 런처입니다.
+작은 캡슐에서 실행 상태와 예상 완료 시각을 보고, 작업을 누르면 단계별 진행률·처리량·결과·로그를 확인할 수 있습니다.
+
+파일 변환, 데이터 처리, 모델 학습, 테스트, 보고서 생성처럼 여러 단계로 이루어진 작업에 사용할 수 있습니다.
+기존 Python 프로세스를 자동 감지하거나, 작업에서 로컬 상태 파일 또는 공통 진행 로그를 전달해 연결합니다.
 
 - Windows 네이티브 WPF (.NET 10), **외부 NuGet 패키지 없음**
 - 작업 ↔ 모니터 연결은 **로컬 JSON 파일 하나**(작업당 1개) — 서버·DB·로그인·AI 호출 없음
 - 상태를 기록하지 않는 기존 Python 작업도 **자동 감지**해서 표시 (명령·CPU·종료 코드·로그 진행률 추정)
-- 모니터는 상태 파일을 **읽기만** 합니다. 작업을 실행·재실행·강제 종료하지 않습니다.
+- 실행 중인 작업의 상태 파일을 읽어 표시하며, 작업을 강제로 종료하지 않습니다. 중단 요청을 지원하도록 연결된 작업에는 요청을 전달할 수 있습니다.
 - 바로가기: 앱(.exe)·폴더·파일·`.lnk`·`.url`·웹 주소를 등록하고, 원래 아이콘 그대로 펼쳐진 패널에서 한 번 눌러 실행/열기
-- 3DMaker·MpdMaker 코드는 건드리지 않습니다. Python 작업은 그대로 외부 프로세스입니다.
+- Python 외의 작업도 `taskmonitor/1` 상태 파일을 기록하거나 `TASK_PROGRESS_JSON` 로그를 래퍼로 연결해 표시할 수 있습니다.
 
 ```
-화면 위 가운데에 떠 있는 캡슐 (시안 B)
+화면 위 가운데에 떠 있는 캡슐
         ╭─────────────────────────────────────────────────────────────────╮
-        │ ▦ 앱 6 │ ◔ 3DMaker 54% · sample2 · ≈12:38 │ ⚠ 갱신 없음 │ ✕ 실패 │ ≡ │
+        │ ▦ 앱 6 │ ◔ 데이터 처리 54% · batch-A · ≈12:38 │ ⚠ 갱신 없음 │ ✕ 실패 │ ≡ │
         ╰─────────────────────────────────────────────────────────────────╯
                  ▼ '앱'을 누르면 펼쳐지는 바로가기 패널 (원래 아이콘, 3열)
 ```
@@ -24,15 +26,19 @@
 | 경로 | 내용 |
 |---|---|
 | `docs/STATE_CONTRACT.md` | **작업 상태 파일 계약 (taskmonitor/1)** — 필드, 저장 방식, 상태 판정, ETA 규칙 |
+| `docs/GENERIC_TASKS.md` | 다른 작업 연결 방법과 공통 진행 로그 예제 |
 | `docs/UI.md` | 화면 구성 |
 | `src/TaskMonitor/` | WPF 모니터 (`Core/`는 WPF와 무관한 판정 로직, `ProcessDiscovery.cs`는 자동 감지) |
 | `src/TaskMonitor.Check/` | 같은 판정 로직을 콘솔로 출력하는 확인 도구 |
 | `python/taskstate.py` | 기존 스크립트에 붙이는 helper (표준 라이브러리만) + CLI |
-| `python/examples/` | 파이프라인 연결 예제, `INFER_PROGRESS_JSON` 연결 예제 |
+| `python/examples/` | 상태 기록, 공통 진행 로그, 기존 로그 연결 예제 |
 | `demo/` | 데모 작업 8종, 자동 검증(`selftest.py`) |
 | `tools/` | 검증용 배치 파일 |
 
 ## 빌드 · 실행
+
+Windows 및 .NET 10 Desktop Runtime이 필요합니다. 소스 빌드에는 .NET 10 SDK가 필요하며,
+Python 연결 도구와 데모는 Python 3.9 이상에서 추가 패키지 없이 사용할 수 있습니다.
 
 ```bat
 build.bat                 :: 또는  dotnet build TaskMonitor.slnx -c Release
@@ -45,8 +51,10 @@ src\TaskMonitor\bin\Release\net10.0-windows\TaskMonitor.exe
 - 캡슐 우클릭 메뉴 / 설정 페이지: 위치(위·아래 × 왼쪽·가운데·오른쪽), 항상 위, 전체 화면 프로그램 실행 시 숨기기,
   Python 작업 자동 감지, **Windows 시작 시 실행**.
 - 캡슐의 빈 곳을 끌어 놓으면 가장 가까운 자리(6곳 중)에 붙습니다(다른 모니터로 옮기면 그 모니터 기준).
-- 상태 폴더 기본값: `%LOCALAPPDATA%\TaskMonitor\tasks`. 바꾸려면 `TASKMONITOR_DIR` 환경 변수 또는 `TaskMonitor.exe --dir <폴더>`.
+- 기본 저장 루트는 `%LOCALAPPDATA%\TaskMonitor`이며 작업 상태는 그 아래 `tasks\`에 저장됩니다.
+  `TASKMONITOR_DIR` 환경 변수 또는 `TaskMonitor.exe --dir <폴더>`로 루트를 바꿀 수 있습니다. 작업과 모니터는 같은 루트를 사용해야 합니다.
 - 배포용 단일 폴더: `powershell -File build.ps1 -Publish` → `publish\TaskMonitor\` (.NET 10 Desktop Runtime 필요)
+- 이미 모니터가 실행 중이면 종료한 뒤 다시 빌드하세요. 빌드 후 `start_monitor.bat`으로 작업 창을 열 수 있습니다.
 
 ## 데모
 
@@ -58,13 +66,13 @@ python demo\selftest.py   :: UI 없이 Python 쪽 자동 검증
 
 | 데모 작업 | 재현하는 상황 |
 |---|---|
-| 3DMaker 데모 파이프라인 | sample2 → sample3 → 검증(검증 중) → 보고서(`.partial` 후 이름 변경) → SBS. 단계 가중치·평소 소요가 있어 **전체 진행률·전체 ETA 표시**. 중단 지원 |
-| MpdMaker 데모 | 파이프라인 완료를 **선행 작업 대기** 후 실행 |
-| sample4 입력 준비 / 인코딩 | 시작 전 **대기**, `.partial`로 복사 → 완성 후 다른 작업의 **입력 대기** 해제 |
-| 인코딩 테스트 | 31%에서 **실패** + 오류·traceback 기록 |
-| 측정 작업 | 실행 중 **갱신이 멈춤** → "실행 중 · 상태 갱신 없음"(실패로 바꾸지 않음) → 재개 후 완료 |
-| 영상 생성 | 완료 기록 없이 프로세스 종료 → **"종료 기록 없음"** |
-| 기존 추론 스크립트 | 수정 없는 스크립트의 `INFER_PROGRESS_JSON` 출력을 래퍼로 연결. 이후 단계 소요를 몰라 전체 ETA **"정보 부족"** |
+| 다단계 처리 | 입력별 처리 → 결과 검증 → 보고서 저장 → 후처리. 단계 가중치와 예상 소요로 **전체 진행률·ETA 표시**, 중단 요청 지원 |
+| 후속 작업 | 앞선 작업이 끝날 때까지 **선행 작업 대기** 후 실행 |
+| 입력 준비 / 파일 처리 | 시작 전 **대기**, `.partial`로 복사 → 완성 후 다른 작업의 **입력 대기** 해제 |
+| 실패 처리 | 처리 도중 **실패** + 오류·traceback 기록 |
+| 갱신 중단과 재개 | 실행 중 **갱신이 멈춤** → "실행 중 · 상태 갱신 없음" → 재개 후 완료 |
+| 종료 기록 누락 | 완료 기록 없이 프로세스 종료 → **"종료 기록 없음"** |
+| 기존 로그 연결 | `INFER_PROGRESS_JSON` 출력을 래퍼로 연결. 이후 단계 소요를 모르면 전체 ETA **"정보 부족"** |
 
 ## 바로가기 런처
 
@@ -92,7 +100,7 @@ python demo\selftest.py   :: UI 없이 Python 쪽 자동 검증
 - **작업 폴더의 상태 기록 읽기**: 명령 인자로 준 폴더(`--batch` 등)에 `status.json`(또는 `progress.json`·`state.json`)이 있으면
   그 기록을 우선 사용합니다. 하위 폴더의 `status.json`(상태 + `condition_key`/`stage`/`step` 등)은 **단위 작업**으로,
   `manifest.json`·`plan.json`·`request.json`의 `segments × conditions`(또는 `steps`)는 **전체 계획**으로 읽어
-  "완료 8/15 · 진행: sample7_F4725_F5024 · 경계를 완만하게 한 고정식"처럼 끝난 것·진행 중·남은 것을 단계 목록으로 보여 줍니다.
+  "완료 8/15 · 진행: batch-A · 파일 변환"처럼 끝난 것·진행 중·남은 것을 단계 목록으로 보여 줍니다.
   상태 기록의 `"log"`가 가리키는 로그에서 현재 단계 처리량을 읽고, 남은 단계는 **같은 조건의 완료 소요 평균**으로 전체 예상 완료(≈)를 계산합니다.
   확인: 배치 폴더를 `tools\diag_workstatus.bat`에 끌어다 놓으면 읽은 결과가 `.taskmonitor_test\workstatus.log`에 나옵니다.
 - **상태 표시**: "실행 중"(로그 진행 기준), "실행 중 · 로그 갱신 없음", "실행 중 · 활동 없음"(CPU 사용이 오래 없음 — 멈춤/대기/GPU 작업 구분 불가),
@@ -101,55 +109,75 @@ python demo\selftest.py   :: UI 없이 Python 쪽 자동 검증
 - 안 잡힐 때: `auto\_discovery.log`에서 제외 사유를 보거나 `tools\diag_detect.bat`(감지 코드를 콘솔로 실행)를 쓰세요.
   대상 이름·제외 목록·최소 실행 시간은 `settings.json`의 `auto_detect_*` 항목으로 바꿀 수 있습니다.
 
-## Python 연결
+## 작업 연결
 
 `python/taskstate.py` 한 파일만 복사하면 됩니다(또는 `PYTHONPATH`에 `python/` 추가).
 
-영상 외 작업도 같은 화면으로 연결할 수 있습니다. `TASK_PROGRESS_JSON`의 `done/total/unit`으로 파일 수·반복 횟수 등을 전달하고,
+`TASK_PROGRESS_JSON`의 `done/total/unit`으로 파일 수·반복 횟수 등을 전달하고,
 단계 계획을 선언하면 완료·실행 중·대기 목록을 함께 보여 줍니다. [다른 작업 연결 가이드와 실행 예제](docs/GENERIC_TASKS.md)를 참고하세요.
 
-**1) 스크립트에 몇 줄 추가** (`python/examples/example_pipeline.py`)
+| 방식 | 적합한 경우 | 표시 정보 |
+|---|---|---|
+| 자동 감지 | 기존 Python 작업을 수정하지 않고 확인 | 실행 여부·CPU 활동·관찰된 종료 코드·연결된 로그의 진행률 |
+| 공통 진행 로그 + 래퍼 | 진행 로그를 출력하는 명령을 실행 | 처리량·단계 전환·미리 선언한 대기 단계·종료 코드에 따른 완료와 실패 |
+| 상태 파일 기록 | 정확한 단계·완료 판정이 필요한 작업 | 단계 계획·대기 사유·검증·결과·오류·중단 요청 지원 |
+
+**1) Python 코드에서 상태 기록**
 
 ```python
 from taskstate import TaskReporter
 
-with TaskReporter("3DMaker 영상 생성·측정", project="3DMaker",
-                  stages=[("sample2", "sample2 영상 생성·측정"), ("sample3", "sample3 영상 생성·측정"),
-                          ("verify", "결과 파일 검증"), ("report", "비교 이미지·보고서 저장"), ("sbs", "SBS 변환")],
-                  log_path="out/run.log", cancel_supported=True) as t:
-    t.begin_stage("sample2", total=599, unit="frames", subject="sample2")
-    for i in range(599):
-        ...                                   # 기존 처리 그대로
-        t.progress(i + 1)                     # 1초에 한 번만 파일에 씀
-        if t.cancel_requested():              # 모니터의 "중단 요청"
-            t.cancelled(); return
-    t.end_stage()
-    t.begin_stage("verify", validating=True)  # 생성이 끝나도 전체는 '검증 중'
-    ...
-    t.add_result("보고서", "out/report.html")
-    t.succeed()                               # 명시적 완료 기록 (없으면 완료로 보지 않음)
+def run(items):
+    with TaskReporter("데이터 처리", project="배치 작업",
+                      stages=[("process", "데이터 처리"), ("verify", "결과 검증")],
+                      cancel_supported=True) as task:
+        task.begin_stage("process", total=len(items), unit="items")
+        for index, item in enumerate(items, start=1):
+            # 여기에 실제 처리 코드
+            task.progress(index)             # 기본 1초마다 모아서 기록
+            if task.cancel_requested():
+                task.cancelled()
+                return
+        task.end_stage()
+        task.begin_stage("verify", validating=True)
+        # 여기에 결과 검증 코드
+        task.end_stage()
+        task.succeed()                       # 작업 전체의 명시적 완료 기록
 ```
 
-선행 작업·입력 대기: `t.wait_for_tasks([other_id])`, `t.wait_for_inputs([path])` (`.partial`/`.tmp`는 완성본으로 보지 않음).
+선행 작업·입력 대기: `task.wait_for_tasks([other_id])`, `task.wait_for_inputs([path])` (`.partial`/`.tmp`는 완성본으로 보지 않음).
+결과 파일·폴더는 `task.add_result("보고서", "out/report.html")`처럼 등록합니다.
 전체 진행률은 모든 단계에 `weight`가, 전체 ETA는 이후 단계에 `expected_seconds`가 있을 때만 표시됩니다.
 
-**2) 스크립트 수정 없이** — `INFER_PROGRESS_JSON {"frame":462,"total":599,"fps":0.78,"eta_seconds":176}` 를 출력하는 경우
+**2) 공통 진행 로그를 래퍼로 연결**
 
-```bat
-python python\taskstate.py wrap --name "sample2 추론" --project 3DMaker --stage infer:추론 -- python infer.py --input sample2
+작업에서 다음 형식의 JSON을 한 줄씩 출력하고 flush합니다. `done`은 필수이며 나머지 필드는 선택 사항입니다.
+
+```text
+TASK_PROGRESS_JSON {"stage":"convert","done":12,"total":100,"unit":"files","rate":2.5,"subject":"batch-A"}
 ```
 
-stdout/stderr를 로그 파일에 저장하고 `frame/total/fps/eta_seconds`를 진행률로 반영합니다. JSON에 `"stage"`가 있으면 단계 전환,
-`"sample"`이 있으면 처리 중인 입력으로 표시합니다. 종료 코드 0이면 "완료(근거: 종료 코드)", 아니면 실패 + 로그 마지막 줄.
+단위는 `files`, `items`, `epochs`, `checks` 등 작업에 맞게 지정합니다. 다음 명령은 저장소에 포함된 예제를 실행합니다.
+
+```bat
+python python\taskstate.py wrap --name "파일 처리" --stage prepare:준비 --stage convert:변환 --stage verify:검증 -- python python\examples\example_generic_progress.py
+```
+
+stdout/stderr를 로그 파일에 저장하고 `done/total/rate/eta_seconds`를 진행률로 반영합니다.
+`stage`가 바뀌면 이전 단계를 완료하고 다음 단계를 시작하며, `subject`는 처리 중인 입력 이름으로 표시합니다.
+`--stage`로 계획을 미리 선언해야 아직 실행하지 않은 단계까지 대기로 보입니다.
+종료 코드 0이면 완료로 기록하고 근거를 종료 코드로 남깁니다. 다른 종료 코드는 실패와 마지막 로그를 기록합니다.
+Python 외 실행 파일도 `--` 뒤에 지정할 수 있으며, 기존 `INFER_PROGRESS_JSON` 형식도 계속 지원합니다.
 
 **3) 이미 다른 프로그램이 실행한 작업**
 
 ```bat
-python python\taskstate.py follow-log --name "sample2 추론" --log C:\work\logs\infer.log --pid 12345
-python python\taskstate.py register --name "외부 인코딩" --pid 12345 --log C:\work\enc.log
+python python\taskstate.py follow-log --name "데이터 처리" --log C:\work\logs\run.log --pid 12345
+python python\taskstate.py register --name "외부 작업" --pid 12345 --log C:\work\logs\run.log
 ```
 
-로그만 따라 읽습니다. 프로세스가 끝나도 완료/실패를 추정하지 않으므로 모니터는 "종료 기록 없음"으로 표시합니다.
+`follow-log`는 진행 로그를 따라 읽고, `register`는 작업 정보와 PID·로그 경로를 등록합니다.
+명시적인 종료 기록 없이 프로세스가 끝나면 완료·실패를 추정하지 않고 "종료 기록 없음"으로 표시합니다.
 배치 파일에서 상태만 바꿀 때: `python python\taskstate.py set --id <ID> --state succeeded`.
 
 ## 저장 방식 (깨지지 않게)
@@ -158,37 +186,34 @@ python python\taskstate.py register --name "외부 인코딩" --pid 12345 --log 
 읽는 쪽은 이전 완성본이나 새 완성본만 봅니다. 모니터는 `FileShare.ReadWrite|Delete`로 읽고, 실패하면 직전 정상본을 유지합니다.
 자세한 내용은 `docs/STATE_CONTRACT.md`.
 
-## 검증 결과 (2026-10-15, Windows 11 · .NET SDK 10.0.401 · Python 3.11.5)
+## 검증 도구
 
-| 완료 기준 | 결과 |
-|---|---|
-| 빌드 | `dotnet build -c Release` 경고 0 · 오류 0 |
-| Python 자동 검증 (`demo/selftest.py`, Windows) | 29개 항목 모두 통과 — 4개 프로세스 × 150회 동시 갱신 중 약 11만 회 읽기에서 깨진 JSON 0회, 덮어쓰기 0회 |
-| 1. 여러 작업 동시 표시 | 8개 데모 작업이 바·목록에 동시에 표시 |
-| 2. 여러 단계 순차 진행 | 파이프라인 5단계, 단계별 처리량·속도·진행률, 단계/전체 진행률 분리 |
-| 3. 선행 작업·입력 대기 | "선행 작업 대기"(대상 작업 상태 함께 표시), "입력 대기"(`.partial` 작성 중에는 해제되지 않음) |
-| 4. 완료·실패 | 완료 / 실패(오류 메시지·단계·traceback·로그 오류 줄) / 중단 요청 → 작업이 스스로 "중단", 선행 작업이 중단되자 후속 작업은 실패 기록 |
-| 5. 갱신 멈춤 | "실행 중 · 상태 갱신 없음" + 마지막 갱신 시각, 재개 후 정상 진행. 완료 기록 없이 끝난 프로세스는 "종료 기록 없음" |
-| 6. 닫았다 다시 열기 | 모니터 종료 후 재실행 시 기존 작업·기록 그대로 표시, 작업은 영향 없음 |
-| 7. 결과·로그 열기 | 결과 파일/폴더 열기, 전체 로그 열기 동작 확인. 사라진 결과는 "완료 · 결과 확인 필요" |
+저장소 루트에서 실행합니다.
 
-| 자동 감지 — 실제 작업 | 3DMaker `-m dev.scripts.run_dibr_hole_color --batch …`(37분 45초, 코드 0)과 MPDMaker `run_sbs.py`(코드 0, 로그 자동 연결)를 상태 기록 없이 감지 |
-| 자동 감지 — 데모 (`tools\verify_auto.bat`) | 로그 있는 작업: tqdm 진행률·ETA 표시 / 로그 없는 작업: "로그 파일을 찾지 못함"(남의 로그를 가져오지 않음) / `exit 2` 작업: "오류 종료 · 코드 2". Python 3.11(python.exe)·3.12 스토어판(python3.12.exe) 모두 감지 |
+```bat
+python demo\selftest.py
+python -m unittest discover -s demo -p test_progress.py
+dotnet run --project src\TaskMonitor.Check -- --progress-selftest
+tools\test_shortcuts.bat
+```
 
-검증 중 발견해 고친 것: 프로세스가 마지막 기록을 쓰고 바로 끝날 때 1초 정도 "종료 기록 없음"이 보이던 경쟁 상태,
-상태가 바뀔 때 목록 줄이 움직이던 문제, 바가 너무 길어 목록 버튼이 잘리던 문제, 배치 파일의 한글·`chcp` 해석 오류,
-자동 감지가 `python3.12` 이름의 프로세스를 놓치던 문제, 같은 폴더의 다른 작업 로그를 진행률로 잘못 가져오던 문제.
+- `demo/selftest.py`: 여러 프로세스의 동시 갱신, 작업 상태 전이, 선행 작업·입력 대기, 오류와 종료 기록 검증
+- `demo/test_progress.py`: 공통 진행 로그와 기존 형식, 단계 전환, 래퍼의 완료·실패 처리 검증
+- `--progress-selftest`: 모니터의 JSON·tqdm 진행 로그 해석 검증
+- `tools/test_shortcuts.bat`: 바로가기 종류 판별, 실행 정보, 아이콘 추출, 저장과 백업 복구 검증
+- `tools/verify_auto.bat`: 기존 Python 작업의 자동 감지와 로그 연결 확인
 
-## 남은 제한
+## 제한 사항
 
 - 자동 감지는 **추정**입니다. 표준 출력을 파일로 남기지 않는 스크립트는 진행률을 알 수 없고("실행 중"과 CPU만 표시),
   모니터가 꺼져 있는 동안 끝난 작업은 종료 코드를 모릅니다. 정확한 단계·완료 판정이 필요한 작업은 `taskstate`를 붙이세요.
+- 일반 문장 로그만으로 아직 실행하지 않은 단계나 전체 수량을 정확히 알 수는 없습니다. 완료·실행 중·대기 목록 전체를 표시하려면 단계 계획과 전환 기록이 필요합니다.
 
 - **ETA는 추정값**입니다. 단계 평균 속도와 최근 속도를 섞고 완만하게 따라가게 했지만, 속도가 크게 바뀌는 작업에서는 오차가 큽니다.
   모니터를 재시작하면 최근 속도 이력은 다시 쌓입니다(단계 평균은 파일의 시작 시각으로 바로 계산).
 - `pid`가 없는 작업은 생존 확인을 못 하므로 "상태 갱신 없음"까지만 판단합니다. 다른 PC에서 기록한 작업도 마찬가지입니다.
 - 중단은 작업이 `cancel_requested()`를 확인하는 경우에만 동작합니다. `wrap`·`follow-log`로 연결한 작업은 "중단 미지원"으로 표시됩니다.
 - 상태 폴더는 1초마다 확인합니다(파일 수십 개 기준). 수천 개가 쌓이면 "목록에서 숨기기"(archive 이동)로 정리하세요.
-- 바는 작업 표시줄 위 귀퉁이에 기본 배치됩니다. 위쪽 귀퉁이를 고르면 최대화된 창의 닫기 버튼을 가릴 수 있어,
+- 캡슐을 위쪽 귀퉁이에 배치하면 최대화된 창의 닫기 버튼을 가릴 수 있어,
   위쪽에 두려면 "화면 위쪽에 고정(공간 예약)"을 권장합니다.
 - 설치 프로그램·자동 업데이트는 없습니다. `--dir`로 상태 폴더를 바꾸면 그 폴더마다 모니터 하나만 뜹니다.
